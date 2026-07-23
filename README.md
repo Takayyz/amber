@@ -96,6 +96,7 @@ erDiagram
         text name "free text, duplicates allowed"
         text description "nullable"
         uuid cover_media_item_id FK "nullable, manually chosen"
+        uuid uploaded_by FK "display only, no permission effect"
         timestamptz updated_at "bumped on new item, drives list order"
         timestamptz deleted_at "nullable, 30-day trash"
     }
@@ -105,6 +106,7 @@ erDiagram
         text media_type "photo | video"
         text storage_key "R2 object key"
         timestamptz captured_at "from Exif, nullable"
+        timestamptz uploaded_at "upload time, sort_key fallback"
         timestamptz sort_key "generated: coalesce(captured_at, uploaded_at)"
         double gps_lat "nullable"
         double gps_lng "nullable"

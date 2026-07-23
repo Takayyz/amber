@@ -1,0 +1,11 @@
+{
+  "name": "amber",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A private space for sharing and preserving photos with the people who matter.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.21.0",
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}
