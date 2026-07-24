@@ -13,7 +13,8 @@
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
     "supabase:reset": "supabase db reset",
-    "supabase:test": "supabase test db --local"
+    "supabase:test": "supabase test db --local",
+    "supabase:gen-types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",

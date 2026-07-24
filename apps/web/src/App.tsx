@@ -1,6 +1,6 @@
 import { AuthProvider, useAuth } from '@/lib/auth-context'
 import { LoginScreen } from '@/components/login-screen'
-import { AuthenticatedStatus } from '@/components/authenticated-status'
+import { HomeScreen } from '@/components/home-screen'
 
 function AppContent() {
   const { session, loading } = useAuth()
@@ -9,7 +9,7 @@ function AppContent() {
     return null
   }
 
-  return session ? <AuthenticatedStatus /> : <LoginScreen />
+  return session ? <HomeScreen /> : <LoginScreen />
 }
 
 function App() {
