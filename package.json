@@ -6,6 +6,9 @@
   "license": "MIT",
   "packageManager": "pnpm@10.21.0",
   "scripts": {
+    "dev": "concurrently -n web,api -c blue,green \"pnpm:dev:web\" \"pnpm:dev:api\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
@@ -13,6 +16,7 @@
     "supabase:test": "supabase test db --local"
   },
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "supabase": "^2.109.1"
   }
 }
