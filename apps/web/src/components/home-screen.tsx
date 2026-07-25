@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
@@ -115,12 +116,14 @@ export function HomeScreen() {
       ) : (
         <div className="flex flex-col gap-3">
           {albums.map((album) => (
-            <Card key={album.id}>
-              <CardHeader>
-                <CardTitle>{album.name}</CardTitle>
-                {album.description && <CardDescription>{album.description}</CardDescription>}
-              </CardHeader>
-            </Card>
+            <Link key={album.id} to={`/albums/${album.id}`} className="block">
+              <Card>
+                <CardHeader>
+                  <CardTitle>{album.name}</CardTitle>
+                  {album.description && <CardDescription>{album.description}</CardDescription>}
+                </CardHeader>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

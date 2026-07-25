@@ -1,6 +1,8 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/auth-context'
 import { LoginScreen } from '@/components/login-screen'
 import { HomeScreen } from '@/components/home-screen'
+import { AlbumDetailScreen } from '@/components/album-detail-screen'
 
 function AppContent() {
   const { session, loading } = useAuth()
@@ -9,13 +11,24 @@ function AppContent() {
     return null
   }
 
-  return session ? <HomeScreen /> : <LoginScreen />
+  if (!session) {
+    return <LoginScreen />
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<HomeScreen />} />
+      <Route path="/albums/:albumId" element={<AlbumDetailScreen />} />
+    </Routes>
+  )
 }
 
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
     </AuthProvider>
   )
 }
