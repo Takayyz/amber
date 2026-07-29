@@ -30,8 +30,9 @@ export async function extractExif(file: File): Promise<ExifData> {
       ? dateResult.value.DateTimeOriginal
       : null
 
-  const gpsLat = gpsResult.status === 'fulfilled' ? gpsResult.value.latitude : null
-  const gpsLng = gpsResult.status === 'fulfilled' ? gpsResult.value.longitude : null
+  const gps = gpsResult.status === 'fulfilled' ? gpsResult.value : null
+  const gpsLat = gps?.latitude ?? null
+  const gpsLng = gps?.longitude ?? null
 
   return { capturedAt, gpsLat, gpsLng }
 }
