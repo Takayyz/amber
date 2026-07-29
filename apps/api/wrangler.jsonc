@@ -16,7 +16,6 @@
 	],
 	"vars": {
 		"SUPABASE_URL": "http://127.0.0.1:54321",
-		"R2_ACCOUNT_ID": "",
 		"R2_BUCKET_NAME": "amber-media",
 		"ALLOWED_ORIGIN": "http://localhost:5173"
 	}
