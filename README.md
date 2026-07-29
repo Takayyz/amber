@@ -40,6 +40,33 @@ flowchart LR
 - `pnpm install`, then `pnpm supabase:start` (requires Docker/OrbStack running) to boot the local Supabase stack.
 - `apps/web` needs a `.env.local` (see `apps/web/.env.example`) with the local Supabase URL and publishable key — both printed by `pnpm supabase:status`.
 - `pnpm dev` starts `apps/web` and `apps/api` together with labeled, colored output; `dev:web` / `dev:api` run them individually.
+- **R2 setup (one-time)**: after creating a Cloudflare account and adding an R2 subscription (free tier covers MVP usage), run `CLOUDFLARE_ACCOUNT_ID=<your-account-id> pnpm setup:r2` to create the `amber-media` bucket, apply its CORS policy, and write `R2_ACCOUNT_ID` into `apps/api/.dev.vars`. It's kept out of `wrangler.jsonc` (and out of git) since this repo is public and an account ID identifies you personally, even though it isn't a credential. R2 API tokens can't be created via CLI — create one in the dashboard (R2 > Manage R2 API Tokens, Object Read & Write, scoped to the bucket) and add the Access Key ID / Secret Access Key to `apps/api/.dev.vars` too. In production, all three (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) are set via `wrangler secret put`, not `wrangler.jsonc`.
+
+## Deployment
+
+### One-time prerequisites
+
+- A production Supabase project (separate from local dev), with `supabase/migrations` applied (`supabase db push` against the linked project) and Resend configured as the custom SMTP provider for magic-link email (see "Authentication" above).
+- Cloudflare R2 set up per the "R2 setup" step above — the same bucket serves both local dev and production, so this isn't a separate step per environment.
+- A decision on the production frontend URL (a `*.pages.dev` subdomain is fine to start; a custom domain can be attached later without changing the steps below).
+
+### Deploying the API (Cloudflare Workers)
+
+1. In `apps/api/wrangler.jsonc`, update the `vars` block for production: `SUPABASE_URL` (the production project's URL) and `ALLOWED_ORIGIN` (the production frontend URL from above).
+2. Run `pnpm wrangler deploy`. This has to happen *before* secrets can be set — Cloudflare rejects `wrangler secret put` against a Worker that's never been deployed.
+3. Set the three R2 credentials as secrets (never as `vars` — see the "R2 setup" note above for why): `pnpm wrangler secret put R2_ACCOUNT_ID`, `pnpm wrangler secret put R2_ACCESS_KEY_ID`, `pnpm wrangler secret put R2_SECRET_ACCESS_KEY`.
+4. Note the deployed Worker's URL (`https://api.<subdomain>.workers.dev` unless a custom domain is attached) — the web app needs it next.
+
+### Deploying the web app (Cloudflare Pages)
+
+1. Set the production build-time env vars (`apps/web/.env.production`, or exported in the shell before building): `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for the production Supabase project, and `VITE_API_URL` set to the Worker URL from the previous step. Vite bakes these in at build time — a static `wrangler pages deploy` doesn't run the build or manage them.
+2. `pnpm --filter web build`
+3. First deploy only: `pnpm --filter web exec wrangler pages project create` (prompts for a project name and production branch).
+4. `pnpm --filter web exec wrangler pages deploy dist`
+
+### Closing the loop
+
+The frontend's real URL (`https://<project>.pages.dev`, or a custom domain) is only known after the first Pages deploy, which creates a chicken-and-egg with step 1 of the API deploy (`ALLOWED_ORIGIN`). Expect one extra round-trip on the very first deploy: after the Pages URL exists, go back and update `ALLOWED_ORIGIN` in `wrangler.jsonc`, redeploy the API (`pnpm wrangler deploy`), and add the same origin to the R2 bucket's CORS policy (re-run `pnpm setup:r2` with `ALLOWED_ORIGINS` set to both the local and production origins, comma-separated). Deciding a custom domain upfront avoids this extra pass on future projects, but isn't required to ship.
 
 ## Access Control Model
 
