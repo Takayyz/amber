@@ -1,0 +1,8 @@
+{
+  "$comment": "Agent skills this repo depends on. Keys are GitHub repos, values are skill names. Append '@<tag-or-sha>' to a skill name to pin it. Install with `pnpm skills:install`.",
+  "cloudflare/skills": [
+    "cloudflare",
+    "wrangler",
+    "workers-best-practices"
+  ]
+}

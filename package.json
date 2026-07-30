@@ -16,7 +16,10 @@
     "supabase:reset": "supabase db reset",
     "supabase:test": "supabase test db --local",
     "supabase:gen-types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
-    "setup:r2": "bash apps/api/scripts/setup-r2.sh"
+    "setup:r2": "bash apps/api/scripts/setup-r2.sh",
+    "skills:install": "bash scripts/skills.sh",
+    "skills:update": "gh skill update --all --dir .agents/skills",
+    "skills:list": "gh skill list --scope project --json skillName,sourceURL,version --jq 'unique_by(.skillName)[] | \"\\(.skillName)\\t\\(.version)\\t\\(.sourceURL)\"'"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",

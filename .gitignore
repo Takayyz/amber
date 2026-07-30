@@ -15,3 +15,12 @@ node_modules/
 .env
 .env.local
 .env.*.local
+
+# Agent skills: vendored content, restored by `pnpm skills:install`.
+# .agents/skills.json (the manifest) is committed; the skills themselves are not.
+# .claude/skills is a symlink to .agents/skills and is committed, so the layout
+# is self-evident after a clone -- it resolves once skills:install has run.
+.agents/skills/
+
+# Claude Code writes per-session plans here; not part of the repo.
+.claude/plans/
