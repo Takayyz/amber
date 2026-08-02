@@ -40,6 +40,8 @@ flowchart LR
 - `pnpm install`, then `pnpm supabase:start` (requires Docker/OrbStack running) to boot the local Supabase stack.
 - `apps/web` needs a `.env.local` (see `apps/web/.env.example`) with the local Supabase URL and publishable key — both printed by `pnpm supabase:status`.
 - `pnpm dev` starts `apps/web` and `apps/api` together with labeled, colored output; `dev:web` / `dev:api` run them individually.
+- `apps/api` needs a `.dev.vars` (see `apps/api/.dev.vars.example`). `SUPABASE_SERVICE_ROLE_KEY` comes from `pnpm supabase:status` — the Worker uses it to send and cancel invitations, which are the only operations in Amber that bypass RLS. The R2 credentials in the same file are covered under "R2 setup" below.
+- Invite emails are not delivered anywhere in local development — the Supabase stack captures them in Mailpit at http://127.0.0.1:54324, which is where the invite link can be picked up to test the flow end to end.
 - **Agent skills**: `.agents/skills.json` declares the Cloudflare skills that AI coding agents load for this repo; `pnpm skills:install` installs them via `gh skill` and prunes anything no longer declared. The skills themselves land in `.agents/skills/`, which is gitignored — the manifest is the source of truth, so add or remove a skill by editing it rather than by installing ad hoc. Append `@<tag-or-sha>` to a skill name to pin it. `pnpm skills:update` pulls upstream changes, `pnpm skills:list` shows each skill's tracked source and version. Source tracking lives in each `SKILL.md` frontmatter, so installing outside `gh skill` leaves a skill untracked and `skills:update` will skip it. `.claude/skills` is a symlink to `.agents/skills`, so Claude Code and the `.agents`-based agents share one copy.
 - **R2 setup (one-time)**: after creating a Cloudflare account and adding an R2 subscription (free tier covers MVP usage), run `CLOUDFLARE_ACCOUNT_ID=<your-account-id> pnpm setup:r2` to create the `amber-media` bucket, apply its CORS policy, and write `R2_ACCOUNT_ID` into `apps/api/.dev.vars`. It's kept out of `wrangler.jsonc` (and out of git) since this repo is public and an account ID identifies you personally, even though it isn't a credential. R2 API tokens can't be created via CLI — create one in the dashboard (R2 > Manage R2 API Tokens, Object Read & Write, scoped to the bucket) and add the Access Key ID / Secret Access Key to `apps/api/.dev.vars` too. In production, all three (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) are set via `wrangler secret put`, not `wrangler.jsonc`.
 
@@ -56,7 +58,8 @@ flowchart LR
 1. In `apps/api/wrangler.jsonc`, update the `vars` block for production: `SUPABASE_URL` (the production project's URL) and `ALLOWED_ORIGIN` (the production frontend URL from above).
 2. Run `pnpm wrangler deploy`. This has to happen *before* secrets can be set — Cloudflare rejects `wrangler secret put` against a Worker that's never been deployed.
 3. Set the three R2 credentials as secrets (never as `vars` — see the "R2 setup" note above for why): `pnpm wrangler secret put R2_ACCOUNT_ID`, `pnpm wrangler secret put R2_ACCESS_KEY_ID`, `pnpm wrangler secret put R2_SECRET_ACCESS_KEY`.
-4. Note the deployed Worker's URL (`https://api.<subdomain>.workers.dev` unless a custom domain is attached) — the web app needs it next.
+4. Set the production project's service role key the same way: `pnpm wrangler secret put SUPABASE_SERVICE_ROLE_KEY` (Supabase dashboard, Project Settings > API). This key bypasses RLS entirely, so it belongs in secrets and never in `wrangler.jsonc` or the frontend bundle.
+5. Note the deployed Worker's URL (`https://api.<subdomain>.workers.dev` unless a custom domain is attached) — the web app needs it next.
 
 ### Deploying the web app (Cloudflare Pages)
 
@@ -75,7 +78,8 @@ Amber is single-tenant: one deployment serves exactly one shared group (e.g. one
 
 Amber uses a flat, service-level access control model — there is no per-album membership and no owner/admin role distinction.
 
-- **Service-level invitations**: Invitations are sent from within an album (for a natural entry point in the UI), but the grant is service-wide — recipients get access to every album, not just the one the invite came from.
+- **Service-level invitations**: Sending an invitation grants service-wide access — the recipient gets every album, not a subset. Invitations are managed from one dialog on the album list screen (send, review who hasn't arrived, cancel), matching the fact that the grant is service-wide rather than scoped to wherever the invite was sent from.
+- **The invite is the grant; acceptance is not a gate**: Supabase Auth's invite creates the `auth.users` row the moment the invitation is sent, so the recipient can sign in from the normal login screen without ever opening the invite email. The `invitations` table is a ledger for showing who hasn't arrived yet — it is never consulted for access control. Cancelling an invitation therefore deletes the underlying auth user; flipping the row's status alone would leave the recipient able to log in at will.
 - **Flat permissions**: Every member can create, edit, or delete any album, photo, or video, and cancel any pending invitation, regardless of who created it. This keeps RLS policies simple — nearly every table's policy reduces to a single "is this user a service member?" check, with no ownership or role lookups.
 - **No forced removal (MVP)**: A member can leave the service voluntarily, but no member can remove another. Revisit if abuse becomes a real problem post-MVP.
 - **No "joined after" cutoff**: a newly invited member immediately sees every pre-existing album and photo — there's no history hidden based on when they joined, consistent with the service-wide grant being all-or-nothing.
@@ -85,9 +89,24 @@ Amber uses a flat, service-level access control model — there is no per-album 
 
 - **Passwordless magic links** via Supabase Auth — no password storage or management.
 - **Invite doubles as first login**: The invitation email uses Supabase Auth's invite flow, so clicking it both creates the account and logs the user in. Returning members request a fresh magic link with the same email address.
-- **Link expiry**: uses Supabase Auth's default expiry, unconfigured — confirm the actual value in the dashboard at implementation time and revisit only if it proves too short in practice.
+- **Membership starts at first login**: the `public.members` row is created when an address is first confirmed, not when the invitation is sent, so an invited-but-never-arrived person owns no rows anywhere. This is a bookkeeping boundary rather than a security one — the auth user exists from the moment of the invite (see "Access Control Model"), so cancelling is the only way to take the grant back.
+- **Confirmation is looser than it sounds**: Supabase Auth treats an invited address as confirmed as soon as a login link is *requested* for it, without waiting for anyone to open that link. Opening the invite link has the same effect, including when a mail scanner or link prefetcher opens it on the recipient's behalf. Neither path leaks access — logging in still requires receiving the email — but it does mean "confirmed" reads as "a login was started for this address", and nothing more.
+- **Link expiry**: uses Supabase Auth's default expiry (`otp_expiry`, one hour locally). Expiry applies to the emailed link, never to the account — once invited, an address can always request a fresh magic link from the login screen, however long the original invite sat unopened.
 - **Display name**: optional profile field, not required at first login. Falls back to the local part of the email address until set. No avatar/profile picture in MVP — an initial or generated color badge is enough.
 - **Unauthenticated screen**: a bare login screen (email input) — no marketing/landing page, since sign-up only ever happens via invite.
+
+### Invite flow
+
+Sending and cancelling both need Supabase's service role key, so both live in the Worker rather than in the browser. Reading the invitation list does not, so the album list screen queries `invitations` directly through RLS like any other table.
+
+- `POST /invitations` — verifies the caller's JWT, rejects an address that is already a member or already has a pending invitation (409), calls Supabase Auth's invite endpoint, then records the row with `invited_by` set to the caller and `invited_user_id` set to the auth user the invite just created.
+- `DELETE /invitations/:id` — deletes that auth user, then marks the row `cancelled`. The order matters: the row is the only pointer to the auth user, so flipping the status first would strand the account with access intact if the delete then failed.
+
+A cancelled address can be invited again — deleting the auth user releases the address, and the partial unique index only constrains rows still `pending`.
+
+Status moves `pending → accepted` from a database trigger on first email confirmation, not from application code. Every way in funnels through the same column (`auth.users.email_confirmed_at`), so the trigger is the one place that observes them all.
+
+Cancellation is only offered while an invitation is `pending`, which keeps it clear of the "no forced removal" rule in "Access Control Model" — cancelling withdraws an invitation nobody has taken up, rather than ejecting a member. The cost is that the window can close on its own: because a login link merely being requested counts as confirmation, a mis-sent invitation can reach `accepted` before anyone notices it went to the wrong address, and there is then no way to withdraw it. Reopening that door means deciding when one member may remove another, which MVP deliberately leaves alone.
 
 ## MVP Feature Notes
 
@@ -159,7 +178,9 @@ erDiagram
         uuid id PK
         text email
         uuid invited_by FK "display only — anyone can cancel"
+        uuid invited_user_id FK "auth user the invite created, for cancellation"
         text status "pending | accepted | cancelled"
+        timestamptz created_at "drives pending-list order"
     }
 ```
 
@@ -172,6 +193,9 @@ erDiagram
 - **`media_item_tags` enforces the 5-tag cap via trigger**, not a check constraint (Postgres can't `CHECK` against a sibling table's row count directly).
 - **`uploaded_by` / `invited_by` are display-only foreign keys** — they never appear in an RLS policy's `USING`/`WITH CHECK` clause. Permission is always "is this user a member," never "is this user the creator."
 - **RLS is a single `is_member()` helper function**, reused via `USING (public.is_member())` on every table — the direct implementation of the flat permission model described in "Access Control Model" above.
+- **Members are provisioned from an `UPDATE` trigger, not just `INSERT`** — Supabase Auth's invite inserts the `auth.users` row unconfirmed, so an insert-time trigger would enroll people who never showed up. The row is created when `email_confirmed_at` goes from null to non-null instead. An insert-time trigger is still kept alongside it for accounts that arrive already confirmed (the first account of a fresh deployment, created out of band by an admin), which never produce that transition.
+- **`invitations.invited_user_id` exists solely to make cancellation possible** — it is the only handle on the auth user an invite created, and unlike `invited_by` it is not display data. It is nullable and `on delete set null`: cancelling deletes the auth user and empties the column, which is correct, since a cancelled row has nothing left to point at.
+- **Duplicate invitations are blocked by a partial unique index** on `lower(email) where status = 'pending'`, not by a plain unique constraint — an address that was cancelled, or that accepted and later left, has to be invitable again.
 - **No `workspace_id` / tenant column anywhere** — consistent with the single-tenant decision; a separate group means a separate deployment, not a row-level partition.
 
 ### Out of Scope for MVP

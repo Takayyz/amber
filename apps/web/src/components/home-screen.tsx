@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
+import { InviteDialog } from '@/components/invite-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -63,11 +64,14 @@ export function HomeScreen() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-4">
-      <header className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{session?.user.email}</p>
-        <Button variant="outline" onClick={() => supabase.auth.signOut()}>
-          ログアウト
-        </Button>
+      <header className="flex items-center justify-between gap-2">
+        <p className="truncate text-sm text-muted-foreground">{session?.user.email}</p>
+        <div className="flex shrink-0 items-center gap-2">
+          <InviteDialog />
+          <Button variant="outline" onClick={() => supabase.auth.signOut()}>
+            ログアウト
+          </Button>
+        </div>
       </header>
 
       <div className="flex items-center justify-between">

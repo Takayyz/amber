@@ -1,6 +1,9 @@
 import {
+  isInvitationErrorResult,
+  isInvitationResult,
   isPresignGetResult,
   isPresignPutResult,
+  type InvitationErrorCode,
   type PresignPutRequest,
   type PresignPutResult,
 } from '@amber/shared'
@@ -41,4 +44,40 @@ export async function presignGet(storageKey: string): Promise<string> {
     throw new Error('failed to get a presigned download URL')
   }
   return data.url
+}
+
+// Carries the API's error code through to the dialog, which needs to word
+// "already a member" differently from a transport failure.
+export class InvitationError extends Error {
+  readonly code: InvitationErrorCode
+
+  constructor(code: InvitationErrorCode) {
+    super(code)
+    this.name = 'InvitationError'
+    this.code = code
+  }
+}
+
+async function invitationErrorFrom(response: Response): Promise<InvitationError> {
+  const data: unknown = await response.json().catch(() => null)
+  return new InvitationError(isInvitationErrorResult(data) ? data.error : 'invite_failed')
+}
+
+export async function sendInvitation(email: string): Promise<string> {
+  const response = await authorizedFetch('/invitations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+
+  if (!response.ok) throw await invitationErrorFrom(response)
+
+  const data: unknown = await response.json()
+  if (!isInvitationResult(data)) throw new InvitationError('invite_failed')
+  return data.invitationId
+}
+
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  const response = await authorizedFetch(`/invitations/${invitationId}`, { method: 'DELETE' })
+  if (!response.ok) throw await invitationErrorFrom(response)
 }
