@@ -59,7 +59,11 @@ export function AlbumDetailScreen() {
       .select('*')
       .eq('album_id', currentAlbumId)
       .is('deleted_at', null)
+      // The id tiebreaker is what keeps this grid and the detail view in the
+      // same order -- sort_key ties on burst shots, which share an Exif
+      // capture time to the second.
       .order('sort_key', { ascending: true })
+      .order('id', { ascending: true })
     setMediaItems(data ?? [])
   }
 
@@ -135,7 +139,9 @@ export function AlbumDetailScreen() {
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {mediaItems.map((item) => (
-                <MediaThumbnail key={item.id} item={item} />
+                <Link key={item.id} to={`/albums/${albumId}/items/${item.id}`} className="block">
+                  <MediaThumbnail item={item} />
+                </Link>
               ))}
             </div>
           )}
