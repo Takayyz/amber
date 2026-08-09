@@ -173,7 +173,13 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+# Off because accounts in Amber come from invitations only (README "Access
+# Control Model"). The login screen's shouldCreateUser: false closes the UI
+# path, but the anon key ships in the frontend bundle, so /auth/v1/signup is
+# callable directly -- and a self-signup lands confirmed, which is exactly
+# what the members trigger enrols on. Invites go through the admin API and
+# are unaffected by this setting.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
@@ -218,6 +224,10 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
+# Stays on despite [auth] enable_signup = false above. The CLI maps this key
+# onto whether the email provider is enabled at all, so turning it off takes
+# magic-link login down with it (`email_provider_disabled`) -- the [auth]
+# setting is the one that blocks self-signup.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
