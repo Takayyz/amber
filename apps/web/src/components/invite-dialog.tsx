@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { UserPlus, X } from 'lucide-react'
 import type { InvitationErrorCode } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dialog'
 
 type Invitation = Database['public']['Tables']['invitations']['Row']
+
+type ListState = 'loading' | 'ready' | 'failed'
 
 const ERROR_MESSAGES: Record<InvitationErrorCode, string> = {
   invalid_email: 'メールアドレスの形式が正しくありません。',
@@ -40,18 +42,41 @@ export function InviteDialog() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchPending = async () => {
-    const { data } = await supabase
-      .from('invitations')
-      .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-    setPending(data ?? [])
-  }
+  // Kept apart from `error`, which belongs to whatever the member just tried
+  // to do -- a failed refresh must not overwrite the reason their cancel or
+  // send failed.
+  const [listState, setListState] = useState<ListState>('loading')
+
+  const fetchPending = useCallback(async () => {
+    setListState('loading')
+
+    // Two different failure shapes: the client returns query errors in
+    // `error`, but a fetch that never completes throws instead. Missing
+    // either one leaves this stuck on "loading" or, worse, reports an empty
+    // list -- and a member acting on "nothing outstanding" would either
+    // think an invitation was cancelled or send it a second time.
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      if (fetchError || !data) {
+        setListState('failed')
+        return
+      }
+
+      setPending(data)
+      setListState('ready')
+    } catch {
+      setListState('failed')
+    }
+  }, [])
 
   useEffect(() => {
     if (open) fetchPending()
-  }, [open])
+  }, [open, fetchPending])
 
   const handleSend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -124,7 +149,13 @@ export function InviteDialog() {
 
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">招待中</p>
-          {pending.length === 0 ? (
+          {listState === 'loading' ? (
+            <p className="text-sm text-muted-foreground">読み込み中…</p>
+          ) : listState === 'failed' ? (
+            <p className="text-sm text-destructive">
+              招待中の一覧を取得できませんでした。開き直してください。
+            </p>
+          ) : pending.length === 0 ? (
             <p className="text-sm text-muted-foreground">まだ届いていない招待はありません。</p>
           ) : (
             <ul className="flex flex-col gap-1">
