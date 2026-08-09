@@ -95,13 +95,14 @@ Amber uses a flat, service-level access control model — there is no per-album 
 - **Display name**: optional profile field, not required at first login. Falls back to the local part of the email address until set. No avatar/profile picture in MVP — an initial or generated color badge is enough.
 - **Unauthenticated screen**: a bare login screen (email input) — no marketing/landing page, since sign-up only ever happens via invite.
 - **Self-signup is disabled at the provider** (`[auth] enable_signup = false`, and the same switch on the production project). The login screen asking for a link rather than an account is not what enforces invite-only: the anon key ships in the frontend bundle, so `/auth/v1/signup` is callable by hand, and an account created that way arrives already confirmed — which is exactly the state that enrols a member. Note that `[auth.email] enable_signup` is a different switch despite the name; the CLI maps it onto whether the email provider works at all, so turning it off disables magic-link login outright.
-- **An invitation that goes unopened past its expiry needs re-sending.** With self-signup off, Supabase Auth answers a magic-link request for an unconfirmed address with `signup_disabled`, so a recipient whose invite link expired cannot help themselves from the login screen. Cancelling the invitation and sending a fresh one is the way back.
+- **An invitation that goes unopened past its expiry needs re-sending.** With self-signup off, Supabase Auth answers a magic-link request for an unconfirmed address with `signup_disabled`, so a recipient whose invite link expired cannot help themselves from the login screen. Someone already inside re-sends it for them, from the same dialog the invitation was sent from.
 
 ### Invite flow
 
 Sending and cancelling both need Supabase's service role key, so both live in the Worker rather than in the browser. Reading the invitation list does not, so the album list screen queries `invitations` directly through RLS like any other table.
 
 - `POST /invitations` — verifies the caller's JWT, rejects an address that is already a member or already has a pending invitation (409), calls Supabase Auth's invite endpoint, then records the row with `invited_by` set to the caller and `invited_user_id` set to the auth user the invite just created.
+- `POST /invitations/:id/resend` — re-sends the email for an invitation that is still `pending`. Supabase Auth hands back the same unconfirmed user rather than creating another, so nothing in the ledger changes; only a fresh link goes out. Offered because the invite link expires long before the invitation does, and with self-signup off the recipient has no way to ask for one themselves.
 - `DELETE /invitations/:id` — deletes that auth user, then marks the row `cancelled`. The order matters: the row is the only pointer to the auth user, so flipping the status first would strand the account with access intact if the delete then failed.
 
 A cancelled address can be invited again — deleting the auth user releases the address, and the partial unique index only constrains rows still `pending`.

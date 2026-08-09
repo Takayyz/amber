@@ -77,6 +77,11 @@ export async function sendInvitation(email: string): Promise<string> {
   return data.invitationId
 }
 
+export async function resendInvitation(invitationId: string): Promise<void> {
+  const response = await authorizedFetch(`/invitations/${invitationId}/resend`, { method: 'POST' })
+  if (!response.ok) throw await invitationErrorFrom(response)
+}
+
 export async function cancelInvitation(invitationId: string): Promise<void> {
   const response = await authorizedFetch(`/invitations/${invitationId}`, { method: 'DELETE' })
   if (!response.ok) throw await invitationErrorFrom(response)

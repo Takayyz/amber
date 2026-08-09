@@ -59,7 +59,7 @@ export function isValidEmail(email: string): boolean {
 
 export type InviteOutcome =
   | { ok: true; userId: string }
-  | { ok: false; code: 'already_member' | 'invite_failed' }
+  | { ok: false; code: 'already_member' | 'rate_limited' | 'invite_failed' }
 
 export async function inviteUser(env: Env, email: string): Promise<InviteOutcome> {
   const url = new URL(`${env.SUPABASE_URL}/auth/v1/invite`)
@@ -77,14 +77,19 @@ export async function inviteUser(env: Env, email: string): Promise<InviteOutcome
   const body: unknown = await response.json().catch(() => null)
 
   if (!response.ok) {
-    // Supabase Auth already refuses to invite a confirmed account, so this is
-    // the "already a member" check -- there is no email column on
-    // public.members to ask instead.
+    // Supabase Auth already refuses to invite a confirmed account, so
+    // email_exists is the "already a member" check -- there is no email
+    // column on public.members to ask instead.
     const errorCode =
       typeof body === 'object' && body !== null
         ? (body as Record<string, unknown>).error_code
         : undefined
-    return { ok: false, code: errorCode === 'email_exists' ? 'already_member' : 'invite_failed' }
+
+    if (errorCode === 'email_exists') return { ok: false, code: 'already_member' }
+    if (errorCode === 'over_email_send_rate_limit' || response.status === 429) {
+      return { ok: false, code: 'rate_limited' }
+    }
+    return { ok: false, code: 'invite_failed' }
   }
 
   const userId =

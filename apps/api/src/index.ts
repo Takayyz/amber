@@ -159,6 +159,36 @@ async function handleCreateInvitation(request: Request, env: Env): Promise<Respo
   return invitationError('invite_failed', 502)
 }
 
+// The invite link expires long before the invitation does, and with
+// self-signup off the recipient cannot ask for a replacement themselves --
+// so somebody already inside has to send one.
+async function handleResendInvitation(request: Request, env: Env, id: string): Promise<Response> {
+  const auth = await requireAuth(request, env)
+  if (!auth.ok) return auth.response
+
+  const lookup = await findInvitation(env, id)
+  if (!lookup.ok) {
+    return invitationError('invite_failed', 502)
+  }
+  if (!lookup.row) {
+    return invitationError('not_pending', 404)
+  }
+  if (lookup.row.status !== 'pending') {
+    return invitationError('not_pending', 409)
+  }
+
+  // Supabase Auth returns the same unconfirmed user for a repeat invite and
+  // simply mails a new link, so there is nothing to write back -- the ledger
+  // row is already correct.
+  const invited = await inviteUser(env, lookup.row.email)
+  if (!invited.ok) {
+    const status = invited.code === 'already_member' ? 409 : invited.code === 'rate_limited' ? 429 : 502
+    return invitationError(invited.code, status)
+  }
+
+  return new Response(null, { status: 204 })
+}
+
 async function handleCancelInvitation(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await requireAuth(request, env)
   if (!auth.ok) return auth.response
@@ -199,6 +229,7 @@ export default {
 
     const url = new URL(request.url)
     const invitationId = url.pathname.match(/^\/invitations\/([^/]+)$/)?.[1]
+    const resendId = url.pathname.match(/^\/invitations\/([^/]+)\/resend$/)?.[1]
     let response: Response
 
     try {
@@ -208,6 +239,8 @@ export default {
         response = await handlePresignGet(request, env)
       } else if (request.method === 'POST' && url.pathname === '/invitations') {
         response = await handleCreateInvitation(request, env)
+      } else if (request.method === 'POST' && resendId) {
+        response = await handleResendInvitation(request, env, resendId)
       } else if (request.method === 'DELETE' && invitationId) {
         response = await handleCancelInvitation(request, env, invitationId)
       } else {

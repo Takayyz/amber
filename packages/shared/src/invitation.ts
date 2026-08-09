@@ -14,6 +14,10 @@ export const INVITATION_ERROR_CODES = [
   'already_member',
   'already_invited',
   'not_pending',
+  // Re-sending exists to get a fresh link to someone who is locked out, so
+  // a send refused by the provider's hourly cap has to say so rather than
+  // read as a generic failure the member would keep retrying.
+  'rate_limited',
   'invite_failed',
 ] as const
 

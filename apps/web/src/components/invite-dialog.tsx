@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { UserPlus, X } from 'lucide-react'
+import { Send, UserPlus, X } from 'lucide-react'
 import type { InvitationErrorCode } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
-import { InvitationError, cancelInvitation, sendInvitation } from '@/lib/api'
+import { InvitationError, cancelInvitation, resendInvitation, sendInvitation } from '@/lib/api'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ const ERROR_MESSAGES: Record<InvitationErrorCode, string> = {
   already_member: 'このアドレスはすでにメンバーです。',
   already_invited: 'このアドレスにはすでに招待を送っています。',
   not_pending: 'この招待はすでに取り消されたか、承諾済みです。',
+  rate_limited: 'メールの送信数が上限に達しました。しばらくおいて試してください。',
   invite_failed: '招待を処理できませんでした。時間をおいて試してください。',
 }
 
@@ -40,6 +41,8 @@ export function InviteDialog() {
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [resendingId, setResendingId] = useState<string | null>(null)
+  const [resentId, setResentId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Kept apart from `error`, which belongs to whatever the member just tried
@@ -49,6 +52,9 @@ export function InviteDialog() {
 
   const fetchPending = useCallback(async () => {
     setListState('loading')
+    // Reopening the dialog, or any send/cancel that refreshes the list,
+    // retires the "sent" note -- it belongs to one click, not to the row.
+    setResentId(null)
 
     // Two different failure shapes: the client returns query errors in
     // `error`, but a fetch that never completes throws instead. Missing
@@ -91,6 +97,23 @@ export function InviteDialog() {
       setError(messageFor(sendError))
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleResend = async (invitationId: string) => {
+    setResendingId(invitationId)
+    setError(null)
+    setResentId(null)
+
+    try {
+      await resendInvitation(invitationId)
+      // Nothing about the row changes on a re-send, so this is the only
+      // signal that the click did anything.
+      setResentId(invitationId)
+    } catch (resendError: unknown) {
+      setError(messageFor(resendError))
+    } finally {
+      setResendingId(null)
     }
   }
 
@@ -162,15 +185,30 @@ export function InviteDialog() {
               {pending.map((invitation) => (
                 <li key={invitation.id} className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm">{invitation.email}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`${invitation.email} の招待を取り消す`}
-                    disabled={cancellingId === invitation.id}
-                    onClick={() => handleCancel(invitation.id)}
-                  >
-                    <X />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {resentId === invitation.id && (
+                      <span className="text-xs text-muted-foreground">送信しました</span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`${invitation.email} に招待を再送する`}
+                      disabled={resendingId === invitation.id}
+                      onClick={() => handleResend(invitation.id)}
+                    >
+                      <Send />
+                      再送
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`${invitation.email} の招待を取り消す`}
+                      disabled={cancellingId === invitation.id}
+                      onClick={() => handleCancel(invitation.id)}
+                    >
+                      <X />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
