@@ -118,7 +118,13 @@ async function handleCreateInvitation(request: Request, env: Env): Promise<Respo
     return invitationError('invalid_email', 400)
   }
 
-  if (await findPendingInvitation(env, email)) {
+  const existing = await findPendingInvitation(env, email)
+  if (!existing.ok) {
+    // Stop rather than guess. Reading a failed lookup as "no invitation yet"
+    // is what would send a second invite for an address that already has one.
+    return invitationError('invite_failed', 502)
+  }
+  if (existing.row) {
     return invitationError('already_invited', 409)
   }
 
@@ -133,25 +139,37 @@ async function handleCreateInvitation(request: Request, env: Env): Promise<Respo
     invitedUserId: invited.userId,
   })
 
-  if (!inserted.ok) {
-    // The invite went out but the ledger did not take it. Drop the auth user
-    // so the address is not left silently holding access with nothing on
-    // screen to cancel.
-    await deleteAuthUser(env, invited.userId)
-    return inserted.conflict
-      ? invitationError('already_invited', 409)
-      : invitationError('invite_failed', 502)
+  if (inserted.ok) {
+    const result: InvitationResult = { invitationId: inserted.id }
+    return Response.json(result, { status: 201 })
   }
 
-  const result: InvitationResult = { invitationId: inserted.id }
-  return Response.json(result, { status: 201 })
+  if (inserted.conflict) {
+    // Someone else's invite for this address won the race. Supabase Auth
+    // hands back the *existing* unconfirmed user rather than making a new
+    // one, so deleting it here would destroy the account belonging to the
+    // invitation that got in first.
+    return invitationError('already_invited', 409)
+  }
+
+  // The invite went out but the ledger did not take it. This user really is
+  // ours -- no pending row claims it -- so drop it rather than leave the
+  // address silently holding access with nothing on screen to cancel.
+  await deleteAuthUser(env, invited.userId)
+  return invitationError('invite_failed', 502)
 }
 
 async function handleCancelInvitation(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await requireAuth(request, env)
   if (!auth.ok) return auth.response
 
-  const invitation = await findInvitation(env, id)
+  const lookup = await findInvitation(env, id)
+  if (!lookup.ok) {
+    // Reporting a lookup failure as "already cancelled" would tell the member
+    // the job is done when nothing has happened yet.
+    return invitationError('invite_failed', 502)
+  }
+  const invitation = lookup.row
   if (!invitation) {
     return invitationError('not_pending', 404)
   }
@@ -183,16 +201,25 @@ export default {
     const invitationId = url.pathname.match(/^\/invitations\/([^/]+)$/)?.[1]
     let response: Response
 
-    if (request.method === 'POST' && url.pathname === '/uploads/presign-put') {
-      response = await handlePresignPut(request, env)
-    } else if (request.method === 'GET' && url.pathname === '/media/presign-get') {
-      response = await handlePresignGet(request, env)
-    } else if (request.method === 'POST' && url.pathname === '/invitations') {
-      response = await handleCreateInvitation(request, env)
-    } else if (request.method === 'DELETE' && invitationId) {
-      response = await handleCancelInvitation(request, env, invitationId)
-    } else {
-      response = new Response('Not Found', { status: 404 })
+    try {
+      if (request.method === 'POST' && url.pathname === '/uploads/presign-put') {
+        response = await handlePresignPut(request, env)
+      } else if (request.method === 'GET' && url.pathname === '/media/presign-get') {
+        response = await handlePresignGet(request, env)
+      } else if (request.method === 'POST' && url.pathname === '/invitations') {
+        response = await handleCreateInvitation(request, env)
+      } else if (request.method === 'DELETE' && invitationId) {
+        response = await handleCancelInvitation(request, env, invitationId)
+      } else {
+        response = new Response('Not Found', { status: 404 })
+      }
+    } catch (error: unknown) {
+      // Anything escaping a handler -- a malformed request body, a dependency
+      // answering with HTML -- would otherwise become a 500 that skips
+      // withCors below, which the browser reports as a network failure with
+      // no readable body. A 500 the client can actually read is better.
+      console.error('unhandled error', error)
+      response = Response.json({ error: 'internal error' }, { status: 500 })
     }
 
     return withCors(response, env)

@@ -30,10 +30,20 @@ function toInvitationRow(value: unknown): InvitationRow | null {
   return { id, email, status, invited_user_id: invitedUserId }
 }
 
-async function firstRow(response: Response): Promise<InvitationRow | null> {
-  if (!response.ok) return null
-  const body: unknown = await response.json()
-  return Array.isArray(body) && body.length > 0 ? toInvitationRow(body[0]) : null
+// "No such row" and "the lookup failed" have to stay distinguishable: the
+// invite path treats the first as permission to go ahead, and going ahead on
+// a failed lookup is what lets it delete somebody else's account.
+export type LookupResult =
+  | { ok: true; row: InvitationRow | null }
+  | { ok: false }
+
+async function firstRow(response: Response): Promise<LookupResult> {
+  if (!response.ok) return { ok: false }
+
+  const body: unknown = await response.json().catch(() => null)
+  if (!Array.isArray(body)) return { ok: false }
+
+  return { ok: true, row: body.length > 0 ? toInvitationRow(body[0]) : null }
 }
 
 // Emails are stored lowercased so PostgREST can match them with eq. rather
@@ -61,7 +71,10 @@ export async function inviteUser(env: Env, email: string): Promise<InviteOutcome
     body: JSON.stringify({ email }),
   })
 
-  const body: unknown = await response.json()
+  // A proxy or a crash can answer with HTML or nothing at all; letting that
+  // throw would escape the CORS wrapper and surface in the browser as a
+  // network error with no message to show.
+  const body: unknown = await response.json().catch(() => null)
 
   if (!response.ok) {
     // Supabase Auth already refuses to invite a confirmed account, so this is
@@ -88,10 +101,7 @@ export async function deleteAuthUser(env: Env, userId: string): Promise<boolean>
   return response.ok || response.status === 404
 }
 
-export async function findPendingInvitation(
-  env: Env,
-  email: string,
-): Promise<InvitationRow | null> {
+export async function findPendingInvitation(env: Env, email: string): Promise<LookupResult> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('select', INVITATION_COLUMNS)
   url.searchParams.set('email', `eq.${email}`)
@@ -101,13 +111,24 @@ export async function findPendingInvitation(
   return firstRow(await fetch(url, { headers: serviceHeaders(env) }))
 }
 
-export async function findInvitation(env: Env, id: string): Promise<InvitationRow | null> {
+export async function findInvitation(env: Env, id: string): Promise<LookupResult> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('select', INVITATION_COLUMNS)
   url.searchParams.set('id', `eq.${id}`)
   url.searchParams.set('limit', '1')
 
   return firstRow(await fetch(url, { headers: serviceHeaders(env) }))
+}
+
+// PostgREST answers 409 for a unique violation and a foreign-key violation
+// alike, so the status alone would report "already invited" for an invite
+// sent by someone whose own members row is missing. The SQLSTATE in the body
+// is what tells them apart.
+async function isUniqueViolation(response: Response): Promise<boolean> {
+  if (response.status !== 409) return false
+  const body: unknown = await response.json().catch(() => null)
+  if (typeof body !== 'object' || body === null) return false
+  return (body as Record<string, unknown>).code === '23505'
 }
 
 export type InsertOutcome = { ok: true; id: string } | { ok: false; conflict: boolean }
@@ -133,22 +154,28 @@ export async function insertInvitation(
     // The partial unique index on pending emails is the race-proof duplicate
     // check; the lookup before the invite is only there to avoid mailing
     // someone twice in the common case.
-    return { ok: false, conflict: response.status === 409 }
+    return { ok: false, conflict: await isUniqueViolation(response) }
   }
 
-  const row = await firstRow(response)
-  return row ? { ok: true, id: row.id } : { ok: false, conflict: false }
+  const lookup = await firstRow(response)
+  return lookup.ok && lookup.row ? { ok: true, id: lookup.row.id } : { ok: false, conflict: false }
 }
 
+// Scoped to pending so a confirmation that lands mid-cancel wins: the trigger
+// will have moved the row to accepted, and this must not drag it back to
+// cancelled after the account is already gone.
 export async function markInvitationCancelled(env: Env, id: string): Promise<boolean> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('id', `eq.${id}`)
+  url.searchParams.set('status', 'eq.pending')
 
   const response = await fetch(url, {
     method: 'PATCH',
-    headers: serviceHeaders(env),
+    headers: { ...serviceHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({ status: 'cancelled' }),
   })
 
-  return response.ok
+  // Zero rows back means it stopped being pending in between.
+  const lookup = await firstRow(response)
+  return lookup.ok && lookup.row !== null
 }
