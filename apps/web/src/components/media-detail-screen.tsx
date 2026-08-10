@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import type { Database } from '@/lib/database.types'
@@ -11,6 +11,9 @@ const SWIPE_THRESHOLD_PX = 50
 // The Worker signs for an hour; re-sign short of that so a long-lived tab
 // never hands a just-expired URL to an <img> that has no way to report it.
 const URL_TTL_MS = 50 * 60 * 1000
+// Long enough for the browser to have taken over the download, after which
+// the iframe has nothing left to do.
+const DOWNLOAD_FRAME_TTL_MS = 60 * 1000
 
 const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
   year: 'numeric',
@@ -47,6 +50,9 @@ export function MediaDetailScreen() {
   // signed -- and carry an expiry, since the signature outlives neither.
   const urlCache = useRef(new Map<string, CachedUrl>())
   const touchStartX = useRef<number | null>(null)
+  const [coverId, setCoverId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const albumPath = `/albums/${albumId}`
   const index = items.findIndex((item) => item.id === mediaItemId)
@@ -97,6 +103,8 @@ export function MediaDetailScreen() {
     const cached = urlCache.current.get(current.storage_key)
     setUrl(cached && cached.expiresAt > Date.now() ? cached.url : null)
     setFailed(false)
+    // Whatever went wrong belonged to the item being left behind.
+    setActionError(null)
 
     resolveUrl(current.storage_key)
       .then((signed) => {
@@ -117,6 +125,96 @@ export function MediaDetailScreen() {
       cancelled = true
     }
   }, [current, previous, next, resolveUrl])
+
+  useEffect(() => {
+    if (!albumId) return
+    let cancelled = false
+
+    supabase
+      .from('albums')
+      .select('cover_media_item_id')
+      .eq('id', albumId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setCoverId(data?.cover_media_item_id ?? null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [albumId])
+
+  const handleDownload = async () => {
+    if (!current) return
+    setBusy(true)
+    setActionError(null)
+
+    try {
+      // Named after the capture date rather than the storage key, which is a
+      // uuid and tells the person nothing once it is in their downloads.
+      const stem = formatTakenAt(current).replace(/[/: ]/g, '-')
+      const signed = await presignGet(current.storage_key, { filename: `amber-${stem}` })
+
+      // Handed to a detached iframe rather than assigned to location: the
+      // attachment disposition means the browser saves the file without
+      // pulling a 500MB video through the page, but if R2 refuses the
+      // signature it answers with an XML error instead, and a top-level
+      // navigation would replace the viewer with it.
+      const frame = document.createElement('iframe')
+      frame.hidden = true
+      frame.src = signed
+      document.body.appendChild(frame)
+      window.setTimeout(() => frame.remove(), DOWNLOAD_FRAME_TTL_MS)
+    } catch {
+      setActionError('ダウンロードを開始できませんでした。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleSetCover = async () => {
+    if (!current || !albumId) return
+    setBusy(true)
+    setActionError(null)
+
+    const { error } = await supabase
+      .from('albums')
+      .update({ cover_media_item_id: current.id })
+      .eq('id', albumId)
+
+    if (error) setActionError('カバーに設定できませんでした。')
+    else setCoverId(current.id)
+    setBusy(false)
+  }
+
+  const handleDelete = async () => {
+    if (!current) return
+    setBusy(true)
+    setActionError(null)
+
+    // Soft: the row is flagged and the R2 object left alone, so this is
+    // undoable from the trash (README "Soft delete").
+    const { error } = await supabase
+      .from('media_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', current.id)
+
+    setBusy(false)
+    if (error) {
+      setActionError('削除できませんでした。')
+      return
+    }
+
+    // Drop it locally too. The album is fetched once per albumId, so leaving
+    // it in would keep it in the counter and let the arrows step back onto
+    // something that is no longer in the album.
+    setItems((previousItems) => previousItems.filter((item) => item.id !== current.id))
+
+    // Whichever neighbour is left is a better landing spot than an item that
+    // is no longer there.
+    const remaining = next ?? previous
+    navigate(remaining ? `${albumPath}/items/${remaining.id}` : albumPath, { replace: true })
+  }
 
   const step = useCallback(
     (target: MediaItem | null) => {
@@ -183,11 +281,44 @@ export function MediaDetailScreen() {
           <X className="size-5" />
         </Link>
         {current && (
-          <span className="text-sm text-neutral-400">
-            {index + 1} / {items.length}
-          </span>
+          <>
+            <span className="text-sm text-neutral-400">
+              {index + 1} / {items.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label="ダウンロード"
+                disabled={busy}
+                onClick={handleDownload}
+                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
+              >
+                <Download className="size-5" />
+              </button>
+              <button
+                type="button"
+                aria-label={coverId === current.id ? 'アルバムのカバーに設定済み' : 'アルバムのカバーにする'}
+                disabled={busy || coverId === current.id || current.media_type === 'video'}
+                onClick={handleSetCover}
+                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
+              >
+                <Star className={coverId === current.id ? 'size-5 fill-current' : 'size-5'} />
+              </button>
+              <button
+                type="button"
+                aria-label="削除"
+                disabled={busy}
+                onClick={handleDelete}
+                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
+              >
+                <Trash2 className="size-5" />
+              </button>
+            </div>
+          </>
         )}
       </header>
+
+      {actionError && <p className="px-4 pb-2 text-center text-sm text-red-400">{actionError}</p>}
 
       {loading ? (
         <p className="flex-1 place-content-center text-center text-sm text-neutral-400">

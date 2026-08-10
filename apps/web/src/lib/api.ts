@@ -36,8 +36,16 @@ export async function presignPut(params: PresignPutRequest): Promise<PresignPutR
   return data
 }
 
-export async function presignGet(storageKey: string): Promise<string> {
-  const response = await authorizedFetch(`/media/presign-get?key=${encodeURIComponent(storageKey)}`)
+export async function presignGet(
+  storageKey: string,
+  download?: { filename: string },
+): Promise<string> {
+  const params = new URLSearchParams({ key: storageKey })
+  // Sending a filename is what asks for a download; without one the signed
+  // URL is just a read, which is what the thumbnails and the viewer want.
+  if (download) params.set('filename', download.filename)
+
+  const response = await authorizedFetch(`/media/presign-get?${params.toString()}`)
 
   const data: unknown = await response.json()
   if (!response.ok || !isPresignGetResult(data)) {

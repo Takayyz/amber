@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { presignGet } from '@/lib/api'
 import type { Database } from '@/lib/database.types'
 import { InviteDialog } from '@/components/invite-dialog'
 import { Button } from '@/components/ui/button'
@@ -19,7 +21,40 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-type Album = Database['public']['Tables']['albums']['Row']
+type MediaItem = Database['public']['Tables']['media_items']['Row']
+
+type Album = Database['public']['Tables']['albums']['Row'] & {
+  cover: Pick<MediaItem, 'storage_key' | 'media_type' | 'deleted_at'> | null
+}
+
+function AlbumCover({ cover }: { cover: Album['cover'] }) {
+  const [url, setUrl] = useState<string | null>(null)
+
+  // A cover can outlive the photo it points at: soft-deleting an item only
+  // flags the row, so the FK's `on delete set null` never fires and the album
+  // keeps pointing at something nobody should see.
+  const usable = cover !== null && cover.deleted_at === null && cover.media_type === 'photo'
+
+  useEffect(() => {
+    if (!usable) return
+    let cancelled = false
+
+    presignGet(cover.storage_key)
+      .then((signed) => {
+        if (!cancelled) setUrl(signed)
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [usable, cover?.storage_key])
+
+  if (!usable || !url) {
+    return <div className="size-16 shrink-0 rounded-md bg-muted" />
+  }
+  return <img src={url} alt="" className="size-16 shrink-0 rounded-md object-cover" />
+}
 
 export function HomeScreen() {
   const { session } = useAuth()
@@ -33,7 +68,10 @@ export function HomeScreen() {
   const fetchAlbums = async () => {
     const { data } = await supabase
       .from('albums')
-      .select('*')
+      // The cover is embedded through the FK column rather than the reverse
+      // album_id relationship, which points the same two tables the other
+      // way; without the constraint name PostgREST cannot tell them apart.
+      .select('*, cover:media_items!albums_cover_media_item_id_fkey(storage_key, media_type, deleted_at)')
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
     setAlbums(data ?? [])
@@ -67,6 +105,9 @@ export function HomeScreen() {
       <header className="flex items-center justify-between gap-2">
         <p className="truncate text-sm text-muted-foreground">{session?.user.email}</p>
         <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="icon" aria-label="ゴミ箱" render={<Link to="/trash" />}>
+            <Trash2 />
+          </Button>
           <InviteDialog />
           <Button variant="outline" onClick={() => supabase.auth.signOut()}>
             ログアウト
@@ -122,9 +163,12 @@ export function HomeScreen() {
           {albums.map((album) => (
             <Link key={album.id} to={`/albums/${album.id}`} className="block">
               <Card>
-                <CardHeader>
-                  <CardTitle>{album.name}</CardTitle>
-                  {album.description && <CardDescription>{album.description}</CardDescription>}
+                <CardHeader className="flex flex-row items-center gap-3">
+                  <AlbumCover cover={album.cover} />
+                  <div className="min-w-0">
+                    <CardTitle>{album.name}</CardTitle>
+                    {album.description && <CardDescription>{album.description}</CardDescription>}
+                  </div>
                 </CardHeader>
               </Card>
             </Link>

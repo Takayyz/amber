@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ImagePlus, Play } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ImagePlus, Play, Trash2 } from 'lucide-react'
 import { PHOTO_EXTENSIONS, VIDEO_EXTENSIONS } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
@@ -50,8 +50,10 @@ export function AlbumDetailScreen() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
 
   const fetchMediaItems = async (currentAlbumId: string) => {
     const { data } = await supabase
@@ -80,10 +82,31 @@ export function AlbumDetailScreen() {
     })
   }, [albumId])
 
+  const handleDeleteAlbum = async () => {
+    if (!albumId) return
+    setDeleting(true)
+
+    // Only the album row is flagged. Its items keep their own deleted_at, so
+    // restoring the album brings back everything except what was deleted
+    // individually first (README "Soft-delete cascade without touching child
+    // rows").
+    const { error } = await supabase
+      .from('albums')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', albumId)
+
+    setDeleting(false)
+    if (error) {
+      setErrorMessage('アルバムを削除できませんでした。')
+      return
+    }
+    navigate('/', { replace: true })
+  }
+
   const handleFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0 || !albumId || !session) return
     setUploading(true)
-    setUploadError(null)
+    setErrorMessage(null)
 
     const results = await Promise.allSettled(
       Array.from(files).map((file) => uploadMediaItem(file, albumId, session.user.id)),
@@ -91,7 +114,7 @@ export function AlbumDetailScreen() {
     const failed = results.filter((result) => result.status === 'rejected')
     if (failed.length > 0) {
       failed.forEach((result) => console.error('upload failed', result.reason))
-      setUploadError(`${failed.length}件のアップロードに失敗しました。`)
+      setErrorMessage(`${failed.length}件のアップロードに失敗しました。`)
     }
 
     setUploading(false)
@@ -118,10 +141,21 @@ export function AlbumDetailScreen() {
                 <p className="text-sm text-muted-foreground">{album.description}</p>
               )}
             </div>
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              <ImagePlus />
-              {uploading ? 'アップロード中…' : '追加'}
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                <ImagePlus />
+                {uploading ? 'アップロード中…' : '追加'}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="アルバムを削除"
+                disabled={deleting}
+                onClick={handleDeleteAlbum}
+              >
+                <Trash2 />
+              </Button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -132,7 +166,7 @@ export function AlbumDetailScreen() {
             />
           </div>
 
-          {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+          {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
 
           {mediaItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">まだ写真がありません。</p>

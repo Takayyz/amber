@@ -102,16 +102,51 @@ async function handlePresignPut(request: Request, env: Env): Promise<Response> {
   return Response.json(result)
 }
 
+// The name ends up inside a signed response header, so it is rebuilt here
+// rather than trusted: an allowlist of plain filename characters, a length
+// cap, and the extension taken from the stored object rather than the caller.
+const FILENAME_ALLOWED = /[^A-Za-z0-9._-]/g
+const EXTENSION_ALLOWED = /[^A-Za-z0-9]/g
+const FILENAME_MAX_LENGTH = 100
+const FILENAME_FALLBACK = 'amber'
+const EXTENSION_FALLBACK = 'bin'
+
+function downloadFilename(storageKey: string, requested: string): string {
+  // lastIndexOf rather than split().pop(), which returns the whole key when
+  // there is no dot and so can never fall back.
+  const dot = storageKey.lastIndexOf('.')
+  const extension = dot === -1 ? EXTENSION_FALLBACK : storageKey.slice(dot + 1)
+  const base = requested
+    .replace(/\.[^.]*$/, '')
+    .replace(FILENAME_ALLOWED, '')
+    .slice(0, FILENAME_MAX_LENGTH)
+
+  return `${base || FILENAME_FALLBACK}.${extension.replace(EXTENSION_ALLOWED, '')}`
+}
+
 async function handlePresignGet(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env)
   if (!auth.ok) return auth.response
 
-  const key = new URL(request.url).searchParams.get('key')
+  const params = new URL(request.url).searchParams
+  const key = params.get('key')
   if (!key) {
     return Response.json({ error: 'key is required' }, { status: 400 })
   }
 
-  const signed = await r2Client(env).sign(new Request(r2ObjectUrl(env, key), { method: 'GET' }), {
+  const url = r2ObjectUrl(env, key)
+
+  // Asking for a filename is what marks the request as a download -- there is
+  // no separate flag, since a download is exactly the case that needs a name.
+  const requestedFilename = params.get('filename')
+  if (requestedFilename !== null) {
+    // The disposition is what makes the browser save the file. An <a download>
+    // is ignored on a cross-origin URL, and R2 is a different origin.
+    const filename = downloadFilename(key, requestedFilename)
+    url.searchParams.set('response-content-disposition', `attachment; filename="${filename}"`)
+  }
+
+  const signed = await r2Client(env).sign(new Request(url, { method: 'GET' }), {
     aws: { signQuery: true },
   })
 
