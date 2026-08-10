@@ -97,6 +97,23 @@ export async function inviteUser(env: Env, email: string): Promise<InviteOutcome
   return typeof userId === 'string' ? { ok: true, userId } : { ok: false, code: 'invite_failed' }
 }
 
+// invited_user_id is `on delete set null`, so it empties whenever the account
+// goes away while the row is still pending -- a cancel whose second step
+// failed, a deletion from the dashboard. Re-inviting such a row creates a
+// fresh account, and losing that id would leave nothing able to revoke it.
+export async function setInvitedUserId(env: Env, id: string, userId: string): Promise<boolean> {
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
+  url.searchParams.set('id', `eq.${id}`)
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: serviceHeaders(env),
+    body: JSON.stringify({ invited_user_id: userId }),
+  })
+
+  return response.ok
+}
+
 export async function deleteAuthUser(env: Env, userId: string): Promise<boolean> {
   const response = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: 'DELETE',
@@ -104,6 +121,37 @@ export async function deleteAuthUser(env: Env, userId: string): Promise<boolean>
   })
   // A user that is already gone is the state we wanted anyway.
   return response.ok || response.status === 404
+}
+
+export type AuthUserLookup = { ok: true; userId: string | null } | { ok: false }
+
+// The fallback for a row whose invited_user_id was emptied: the address is
+// the only handle left on the account, and cancelling has to find it or it
+// reports success while leaving the account able to log in.
+export async function findAuthUserIdByEmail(env: Env, email: string): Promise<AuthUserLookup> {
+  const url = new URL(`${env.SUPABASE_URL}/auth/v1/admin/users`)
+  url.searchParams.set('filter', email)
+  url.searchParams.set('per_page', '50')
+
+  const response = await fetch(url, { headers: serviceHeaders(env) })
+  if (!response.ok) return { ok: false }
+
+  const body: unknown = await response.json().catch(() => null)
+  if (typeof body !== 'object' || body === null) return { ok: false }
+
+  const users = (body as Record<string, unknown>).users
+  if (!Array.isArray(users)) return { ok: false }
+
+  // `filter` is a substring search, so the exact address has to be picked out.
+  for (const user of users) {
+    if (typeof user !== 'object' || user === null) continue
+    const record = user as Record<string, unknown>
+    if (typeof record.email === 'string' && record.email.toLowerCase() === email) {
+      return { ok: true, userId: typeof record.id === 'string' ? record.id : null }
+    }
+  }
+
+  return { ok: true, userId: null }
 }
 
 export async function findPendingInvitation(env: Env, email: string): Promise<LookupResult> {

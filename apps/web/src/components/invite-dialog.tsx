@@ -25,7 +25,7 @@ const ERROR_MESSAGES: Record<InvitationErrorCode, string> = {
   already_member: 'このアドレスはすでにメンバーです。',
   already_invited: 'このアドレスにはすでに招待を送っています。',
   not_pending: 'この招待はすでに取り消されたか、承諾済みです。',
-  rate_limited: 'メールの送信数が上限に達しました。しばらくおいて試してください。',
+  rate_limited: '1時間あたりのメール送信数が上限に達しました。1時間ほどおいて試してください。',
   invite_failed: '招待を処理できませんでした。時間をおいて試してください。',
 }
 
@@ -112,6 +112,11 @@ export function InviteDialog() {
       setResentId(invitationId)
     } catch (resendError: unknown) {
       setError(messageFor(resendError))
+      // The usual reason for failing is that the invitation stopped being
+      // pending -- somebody else cancelled it, or the recipient accepted.
+      // Leaving the row on screen would let the member keep re-sending
+      // something that is no longer there.
+      await fetchPending()
     } finally {
       setResendingId(null)
     }

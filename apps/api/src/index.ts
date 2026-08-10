@@ -11,6 +11,7 @@ import {
 import { requireAuth } from './lib/auth'
 import {
   deleteAuthUser,
+  findAuthUserIdByEmail,
   findInvitation,
   findPendingInvitation,
   insertInvitation,
@@ -18,6 +19,7 @@ import {
   isValidEmail,
   markInvitationCancelled,
   normalizeEmail,
+  setInvitedUserId,
 } from './lib/supabase'
 
 function corsHeaders(env: Env) {
@@ -38,6 +40,14 @@ function withCors(response: Response, env: Env): Response {
 
 function invitationError(code: InvitationErrorCode, status: number): Response {
   return Response.json({ error: code }, { status })
+}
+
+// Shared by sending and re-sending so the same refusal does not come back as
+// 502 from one route and 429 from the other.
+function inviteFailureStatus(code: 'already_member' | 'rate_limited' | 'invite_failed'): number {
+  if (code === 'already_member') return 409
+  if (code === 'rate_limited') return 429
+  return 502
 }
 
 function r2Client(env: Env) {
@@ -130,7 +140,7 @@ async function handleCreateInvitation(request: Request, env: Env): Promise<Respo
 
   const invited = await inviteUser(env, email)
   if (!invited.ok) {
-    return invitationError(invited.code, invited.code === 'already_member' ? 409 : 502)
+    return invitationError(invited.code, inviteFailureStatus(invited.code))
   }
 
   const inserted = await insertInvitation(env, {
@@ -177,13 +187,20 @@ async function handleResendInvitation(request: Request, env: Env, id: string): P
     return invitationError('not_pending', 409)
   }
 
-  // Supabase Auth returns the same unconfirmed user for a repeat invite and
-  // simply mails a new link, so there is nothing to write back -- the ledger
-  // row is already correct.
   const invited = await inviteUser(env, lookup.row.email)
   if (!invited.ok) {
-    const status = invited.code === 'already_member' ? 409 : invited.code === 'rate_limited' ? 429 : 502
-    return invitationError(invited.code, status)
+    return invitationError(invited.code, inviteFailureStatus(invited.code))
+  }
+
+  // Usually Supabase Auth hands back the same unconfirmed user and this is a
+  // no-op. It is not when invited_user_id was emptied by the account being
+  // deleted out from under a still-pending row: the re-invite then creates a
+  // new account, and without writing its id back nothing could revoke it --
+  // cancel would find no pointer, skip the delete, and report success.
+  if (invited.userId !== lookup.row.invited_user_id) {
+    if (!(await setInvitedUserId(env, id, invited.userId))) {
+      return invitationError('invite_failed', 502)
+    }
   }
 
   return new Response(null, { status: 204 })
@@ -207,10 +224,23 @@ async function handleCancelInvitation(request: Request, env: Env, id: string): P
     return invitationError('not_pending', 409)
   }
 
+  // A missing pointer means it was lost, not that there is nothing to revoke:
+  // invited_user_id empties on its own if the account is deleted while the
+  // row is still pending. Fall back to the address before concluding the
+  // cancellation has nothing to do.
+  let invitedUserId = invitation.invited_user_id
+  if (!invitedUserId) {
+    const byEmail = await findAuthUserIdByEmail(env, invitation.email)
+    if (!byEmail.ok) {
+      return invitationError('invite_failed', 502)
+    }
+    invitedUserId = byEmail.userId
+  }
+
   // Delete the account before touching the ledger: the row is the only
   // pointer to it, so flipping the status first would strand the account with
   // its access intact if this then failed.
-  if (invitation.invited_user_id && !(await deleteAuthUser(env, invitation.invited_user_id))) {
+  if (invitedUserId && !(await deleteAuthUser(env, invitedUserId))) {
     return invitationError('invite_failed', 502)
   }
 
