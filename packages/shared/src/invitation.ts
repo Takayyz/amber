@@ -18,6 +18,9 @@ export const INVITATION_ERROR_CODES = [
   // a send refused by the provider's hourly cap has to say so rather than
   // read as a generic failure the member would keep retrying.
   'rate_limited',
+  // Our own cooldown, which is a much shorter wait than the provider's cap
+  // and worth telling apart from it.
+  'resend_too_soon',
   'invite_failed',
 ] as const
 

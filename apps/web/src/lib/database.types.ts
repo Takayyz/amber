@@ -86,6 +86,7 @@ export type Database = {
           id: string
           invited_by: string | null
           invited_user_id: string | null
+          last_sent_at: string
           status: string
         }
         Insert: {
@@ -94,6 +95,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           invited_user_id?: string | null
+          last_sent_at?: string
           status?: string
         }
         Update: {
@@ -102,6 +104,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           invited_user_id?: string | null
+          last_sent_at?: string
           status?: string
         }
         Relationships: [

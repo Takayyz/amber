@@ -102,7 +102,7 @@ Amber uses a flat, service-level access control model — there is no per-album 
 Sending and cancelling both need Supabase's service role key, so both live in the Worker rather than in the browser. Reading the invitation list does not, so the album list screen queries `invitations` directly through RLS like any other table.
 
 - `POST /invitations` — verifies the caller's JWT, rejects an address that is already a member or already has a pending invitation (409), calls Supabase Auth's invite endpoint, then records the row with `invited_by` set to the caller and `invited_user_id` set to the auth user the invite just created.
-- `POST /invitations/:id/resend` — re-sends the email for an invitation that is still `pending`. Supabase Auth hands back the same unconfirmed user rather than creating another, so nothing in the ledger changes; only a fresh link goes out. Offered because the invite link expires long before the invitation does, and with self-signup off the recipient has no way to ask for one themselves.
+- `POST /invitations/:id/resend` — re-sends the email for an invitation that is still `pending`, at most once a minute per invitation. Supabase Auth hands back the same unconfirmed user rather than creating another, so only a fresh link goes out. Offered because the invite link expires long before the invitation does, and with self-signup off the recipient has no way to ask for one themselves. The cooldown is there because Supabase Auth's hourly mail budget is shared with magic-link login: burning it through re-sends would stop existing members from logging in, and under the flat permission model any member can hold the button down. A minute is aimed at repeat clicking rather than at a determined member, who already has delete rights over everything in the service.
 - `DELETE /invitations/:id` — deletes that auth user, then marks the row `cancelled`. The order matters: the row is the only pointer to the auth user, so flipping the status first would strand the account with access intact if the delete then failed.
 
 A cancelled address can be invited again — deleting the auth user releases the address, and the partial unique index only constrains rows still `pending`.
@@ -184,6 +184,7 @@ erDiagram
         uuid invited_user_id FK "auth user the invite created, for cancellation"
         text status "pending | accepted | cancelled"
         timestamptz created_at "drives pending-list order"
+        timestamptz last_sent_at "gates the re-send cooldown"
     }
 ```
 

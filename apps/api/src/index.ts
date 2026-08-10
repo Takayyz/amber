@@ -19,8 +19,10 @@ import {
   isValidEmail,
   markInvitationCancelled,
   normalizeEmail,
-  setInvitedUserId,
+  recordInvitationSent,
 } from './lib/supabase'
+
+const RESEND_COOLDOWN_MS = 60_000
 
 function corsHeaders(env: Env) {
   return {
@@ -187,20 +189,26 @@ async function handleResendInvitation(request: Request, env: Env, id: string): P
     return invitationError('not_pending', 409)
   }
 
+  // Checked here rather than left to the provider's cap, which is a
+  // service-wide hourly budget shared with magic-link login -- spending it on
+  // re-sends would lock existing members out of signing in.
+  const sinceLastSent = Date.now() - Date.parse(lookup.row.last_sent_at)
+  if (Number.isFinite(sinceLastSent) && sinceLastSent < RESEND_COOLDOWN_MS) {
+    return invitationError('resend_too_soon', 429)
+  }
+
   const invited = await inviteUser(env, lookup.row.email)
   if (!invited.ok) {
     return invitationError(invited.code, inviteFailureStatus(invited.code))
   }
 
-  // Usually Supabase Auth hands back the same unconfirmed user and this is a
-  // no-op. It is not when invited_user_id was emptied by the account being
-  // deleted out from under a still-pending row: the re-invite then creates a
+  // Stamps the cooldown, and refreshes invited_user_id in the same write.
+  // Usually the id is unchanged, but not when the column had been emptied by
+  // the account going away under a still-pending row: the re-invite made a
   // new account, and without writing its id back nothing could revoke it --
   // cancel would find no pointer, skip the delete, and report success.
-  if (invited.userId !== lookup.row.invited_user_id) {
-    if (!(await setInvitedUserId(env, id, invited.userId))) {
-      return invitationError('invite_failed', 502)
-    }
+  if (!(await recordInvitationSent(env, id, invited.userId))) {
+    return invitationError('invite_failed', 502)
   }
 
   return new Response(null, { status: 204 })

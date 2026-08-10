@@ -7,9 +7,10 @@ export interface InvitationRow {
   email: string
   invited_user_id: string | null
   status: string
+  last_sent_at: string
 }
 
-const INVITATION_COLUMNS = 'id,email,invited_user_id,status'
+const INVITATION_COLUMNS = 'id,email,invited_user_id,status,last_sent_at'
 
 function serviceHeaders(env: Env): Record<string, string> {
   return {
@@ -22,12 +23,13 @@ function serviceHeaders(env: Env): Record<string, string> {
 function toInvitationRow(value: unknown): InvitationRow | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
-  const { id, email, status, invited_user_id: invitedUserId } = record
+  const { id, email, status, invited_user_id: invitedUserId, last_sent_at: lastSentAt } = record
 
   if (typeof id !== 'string' || typeof email !== 'string' || typeof status !== 'string') return null
+  if (typeof lastSentAt !== 'string') return null
   if (invitedUserId !== null && typeof invitedUserId !== 'string') return null
 
-  return { id, email, status, invited_user_id: invitedUserId }
+  return { id, email, status, invited_user_id: invitedUserId, last_sent_at: lastSentAt }
 }
 
 // "No such row" and "the lookup failed" have to stay distinguishable: the
@@ -97,18 +99,23 @@ export async function inviteUser(env: Env, email: string): Promise<InviteOutcome
   return typeof userId === 'string' ? { ok: true, userId } : { ok: false, code: 'invite_failed' }
 }
 
-// invited_user_id is `on delete set null`, so it empties whenever the account
-// goes away while the row is still pending -- a cancel whose second step
-// failed, a deletion from the dashboard. Re-inviting such a row creates a
-// fresh account, and losing that id would leave nothing able to revoke it.
-export async function setInvitedUserId(env: Env, id: string, userId: string): Promise<boolean> {
+// Written after every re-send. last_sent_at drives the cooldown, and
+// invited_user_id has to be refreshed alongside it because the column is
+// `on delete set null`: it empties whenever the account goes away while the
+// row is still pending, and the re-invite then created a fresh account whose
+// id is the only thing that can revoke it later.
+export async function recordInvitationSent(
+  env: Env,
+  id: string,
+  userId: string,
+): Promise<boolean> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('id', `eq.${id}`)
 
   const response = await fetch(url, {
     method: 'PATCH',
     headers: serviceHeaders(env),
-    body: JSON.stringify({ invited_user_id: userId }),
+    body: JSON.stringify({ invited_user_id: userId, last_sent_at: new Date().toISOString() }),
   })
 
   return response.ok

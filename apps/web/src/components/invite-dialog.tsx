@@ -26,6 +26,7 @@ const ERROR_MESSAGES: Record<InvitationErrorCode, string> = {
   already_invited: 'このアドレスにはすでに招待を送っています。',
   not_pending: 'この招待はすでに取り消されたか、承諾済みです。',
   rate_limited: '1時間あたりのメール送信数が上限に達しました。1時間ほどおいて試してください。',
+  resend_too_soon: '送信したばかりです。1分ほどおいてから再送してください。',
   invite_failed: '招待を処理できませんでした。時間をおいて試してください。',
 }
 
