@@ -108,17 +108,22 @@ export async function recordInvitationSent(
   env: Env,
   id: string,
   userId: string,
-): Promise<boolean> {
+): Promise<LookupResult> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('id', `eq.${id}`)
+  // Still scoped to pending: a cancel landing between the check and here
+  // would otherwise leave a cancelled row pointing at the account the
+  // re-invite just created, with nothing in the dialog able to revoke it.
+  url.searchParams.set('status', 'eq.pending')
+  url.searchParams.set('select', INVITATION_COLUMNS)
 
   const response = await fetch(url, {
     method: 'PATCH',
-    headers: serviceHeaders(env),
+    headers: { ...serviceHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify({ invited_user_id: userId, last_sent_at: new Date().toISOString() }),
   })
 
-  return response.ok
+  return firstRow(response)
 }
 
 export async function deleteAuthUser(env: Env, userId: string): Promise<boolean> {
@@ -221,21 +226,26 @@ export async function insertInvitation(
   return lookup.ok && lookup.row ? { ok: true, id: lookup.row.id } : { ok: false, conflict: false }
 }
 
-// Scoped to pending so a confirmation that lands mid-cancel wins: the trigger
-// will have moved the row to accepted, and this must not drag it back to
-// cancelled after the account is already gone.
-export async function markInvitationCancelled(env: Env, id: string): Promise<boolean> {
+// Moves a row between statuses and reports whether it was still in the
+// expected one. Scoping the update to `from` makes the transition itself the
+// claim: two callers racing cannot both come away believing they won it.
+export async function transitionInvitation(
+  env: Env,
+  id: string,
+  from: string,
+  to: string,
+): Promise<LookupResult> {
   const url = new URL(`${env.SUPABASE_URL}/rest/v1/invitations`)
   url.searchParams.set('id', `eq.${id}`)
-  url.searchParams.set('status', 'eq.pending')
+  url.searchParams.set('status', `eq.${from}`)
+  url.searchParams.set('select', INVITATION_COLUMNS)
 
   const response = await fetch(url, {
     method: 'PATCH',
     headers: { ...serviceHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({ status: 'cancelled' }),
+    body: JSON.stringify({ status: to }),
   })
 
-  // Zero rows back means it stopped being pending in between.
-  const lookup = await firstRow(response)
-  return lookup.ok && lookup.row !== null
+  // A null row means it had already left `from`.
+  return firstRow(response)
 }

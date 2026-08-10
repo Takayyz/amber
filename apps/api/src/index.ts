@@ -17,9 +17,9 @@ import {
   insertInvitation,
   inviteUser,
   isValidEmail,
-  markInvitationCancelled,
   normalizeEmail,
   recordInvitationSent,
+  transitionInvitation,
 } from './lib/supabase'
 
 const RESEND_COOLDOWN_MS = 60_000
@@ -207,28 +207,44 @@ async function handleResendInvitation(request: Request, env: Env, id: string): P
   // the account going away under a still-pending row: the re-invite made a
   // new account, and without writing its id back nothing could revoke it --
   // cancel would find no pointer, skip the delete, and report success.
-  if (!(await recordInvitationSent(env, id, invited.userId))) {
+  const recorded = await recordInvitationSent(env, id, invited.userId)
+  if (!recorded.ok) {
     return invitationError('invite_failed', 502)
+  }
+  if (!recorded.row) {
+    // Cancelled while the mail was going out. The account the re-invite just
+    // created belongs to nothing now, and a cancelled row is not listed
+    // anywhere, so take it back out rather than leave it able to log in.
+    await deleteAuthUser(env, invited.userId)
+    return invitationError('not_pending', 409)
   }
 
   return new Response(null, { status: 204 })
+}
+
+// Undoes the claim so the invitation reappears in the dialog. Leaving it
+// cancelled would hide an account that still works from the only screen able
+// to revoke it.
+async function abandonCancel(env: Env, id: string): Promise<Response> {
+  await transitionInvitation(env, id, 'cancelled', 'pending')
+  return invitationError('invite_failed', 502)
 }
 
 async function handleCancelInvitation(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await requireAuth(request, env)
   if (!auth.ok) return auth.response
 
-  const lookup = await findInvitation(env, id)
-  if (!lookup.ok) {
-    // Reporting a lookup failure as "already cancelled" would tell the member
+  // Claim the row first. The status flip is the only atomic step available,
+  // so winning it is what earns the right to delete the account. Checking
+  // first and deleting after would let a confirmation land in between and
+  // destroy an account that had just legitimately become a member.
+  const claim = await transitionInvitation(env, id, 'pending', 'cancelled')
+  if (!claim.ok) {
+    // Reporting a failed write as "already cancelled" would tell the member
     // the job is done when nothing has happened yet.
     return invitationError('invite_failed', 502)
   }
-  const invitation = lookup.row
-  if (!invitation) {
-    return invitationError('not_pending', 404)
-  }
-  if (invitation.status !== 'pending') {
+  if (!claim.row) {
     return invitationError('not_pending', 409)
   }
 
@@ -236,24 +252,17 @@ async function handleCancelInvitation(request: Request, env: Env, id: string): P
   // invited_user_id empties on its own if the account is deleted while the
   // row is still pending. Fall back to the address before concluding the
   // cancellation has nothing to do.
-  let invitedUserId = invitation.invited_user_id
+  let invitedUserId = claim.row.invited_user_id
   if (!invitedUserId) {
-    const byEmail = await findAuthUserIdByEmail(env, invitation.email)
-    if (!byEmail.ok) {
-      return invitationError('invite_failed', 502)
-    }
+    const byEmail = await findAuthUserIdByEmail(env, claim.row.email)
+    // A failed lookup is not proof there is nothing to delete, and answering
+    // 204 on one would report the access revoked while it still works.
+    if (!byEmail.ok) return abandonCancel(env, id)
     invitedUserId = byEmail.userId
   }
 
-  // Delete the account before touching the ledger: the row is the only
-  // pointer to it, so flipping the status first would strand the account with
-  // its access intact if this then failed.
   if (invitedUserId && !(await deleteAuthUser(env, invitedUserId))) {
-    return invitationError('invite_failed', 502)
-  }
-
-  if (!(await markInvitationCancelled(env, id))) {
-    return invitationError('invite_failed', 502)
+    return abandonCancel(env, id)
   }
 
   return new Response(null, { status: 204 })
