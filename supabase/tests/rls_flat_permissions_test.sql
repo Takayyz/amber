@@ -7,7 +7,7 @@
 -- set up yet -- left as future work rather than adding a test-helper
 -- dependency the rest of the schema doesn't otherwise need.
 BEGIN;
-SELECT plan(15);
+SELECT plan(16);
 
 -- RLS is enabled on every table. pgtap has no is_rls_enabled() helper, so
 -- check pg_class.relrowsecurity directly.
@@ -26,12 +26,30 @@ SELECT policies_are(
   'members has roster-read + self-update policies, not a flat all-ops policy'
 );
 
--- Every other table reduces to the single flat is_member() policy.
+-- Every other content table reduces to the single flat is_member() policy.
 SELECT policies_are('public', 'albums', ARRAY['albums_all'], 'albums has a single flat policy');
 SELECT policies_are('public', 'media_items', ARRAY['media_items_all'], 'media_items has a single flat policy');
 SELECT policies_are('public', 'tags', ARRAY['tags_all'], 'tags has a single flat policy');
 SELECT policies_are('public', 'media_item_tags', ARRAY['media_item_tags_all'], 'media_item_tags has a single flat policy');
-SELECT policies_are('public', 'invitations', ARRAY['invitations_all'], 'invitations has a single flat policy');
+
+-- invitations is the exception: members read it, only the Worker writes it.
+-- Writes have to reach Supabase Auth, so they need the service role -- and
+-- leaving them open let a member name somebody else's address in a row and
+-- have the cancel path delete that account, which "No forced removal" says
+-- cannot happen.
+SELECT policies_are(
+  'public', 'invitations',
+  ARRAY['invitations_select'],
+  'invitations is read-only through RLS'
+);
+-- REFERENCES/TRIGGER/TRUNCATE come with the table rather than from a grant of
+-- ours, and none of them can read or change a row; SELECT being the only data
+-- privilege is the property that matters.
+SELECT table_privs_are(
+  'public', 'invitations', 'authenticated',
+  ARRAY['SELECT', 'REFERENCES', 'TRIGGER', 'TRUNCATE'],
+  'authenticated holds no write privilege on invitations'
+);
 
 -- Supporting functions and the 5-tag-cap trigger exist.
 SELECT has_function('public', 'is_member', 'is_member() helper exists');
