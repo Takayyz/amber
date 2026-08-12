@@ -24,3 +24,6 @@ node_modules/
 
 # Claude Code writes per-session plans here; not part of the repo.
 .claude/plans/
+
+# Working notes carried between sessions; personal, unlike the rest of docs/.
+docs/note.md

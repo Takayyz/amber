@@ -19,6 +19,15 @@ For all limits and quotas, retrieve from the product's `/platform/limits/` page.
 
 Run `wrangler types` after changing bindings in wrangler.jsonc.
 
+## Tests
+
+`pnpm test` from the repo root. Tests live in `test/` and run on the real Workers runtime via `@cloudflare/vitest-pool-workers`.
+
+- Use `test/helpers.ts`: `mockNetwork()` in `beforeAll`, `endOfTest` in `afterEach`, `authedRequest()` for a signed request.
+- Declare every outbound call with `fetchMock`. The network is closed otherwise, so an undeclared call fails — and every declared interceptor must be used, since an unused one means a call that never happened.
+- Test bindings come from `vitest.config.mts`, never from `.dev.vars`.
+- `pnpm --filter api typecheck` covers both `tsconfig.json` and `test/tsconfig.json`; vitest does not type-check.
+
 ## Node.js Compatibility
 
 https://developers.cloudflare.com/workers/runtime-apis/nodejs/
