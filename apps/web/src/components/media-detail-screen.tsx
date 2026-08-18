@@ -3,9 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
+import { uploaderLabel } from '@/lib/member-name'
 import type { Database } from '@/lib/database.types'
 
-type MediaItem = Database['public']['Tables']['media_items']['Row']
+// The joined member rides along with the row; generated types cover the table
+// itself but not what an embedded select adds to it.
+type MediaItem = Database['public']['Tables']['media_items']['Row'] & {
+  uploader: { display_name: string | null } | null
+}
 
 const SWIPE_THRESHOLD_PX = 50
 // The Worker signs for an hour; re-sign short of that so a long-lived tab
@@ -67,7 +72,10 @@ export function MediaDetailScreen() {
     setLoading(true)
     supabase
       .from('media_items')
-      .select('*')
+      // The uploader comes along on the same query: the footer names them, and
+      // a second round trip per photo would show the name late on every step
+      // through the album.
+      .select('*, uploader:members!media_items_uploaded_by_fkey(display_name)')
       .eq('album_id', albumId)
       .is('deleted_at', null)
       // sort_key alone is not a total order: Exif capture time is only
@@ -370,7 +378,7 @@ export function MediaDetailScreen() {
           </div>
 
           <footer className="p-4 text-center text-sm text-neutral-400">
-            {formatTakenAt(current)}
+            {formatTakenAt(current)} · by {uploaderLabel(current)}
           </footer>
         </>
       )}
