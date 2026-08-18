@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ImagePlus, Play, Trash2 } from 'lucide-react'
 import { PHOTO_EXTENSIONS, VIDEO_EXTENSIONS } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { presignGet } from '@/lib/api'
-import { uploadMediaItem } from '@/lib/upload'
+import { useUploadQueue } from '@/lib/use-upload-queue'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
+import { UploadTray } from '@/components/upload-tray'
 
 type Album = Database['public']['Tables']['albums']['Row']
 type MediaItem = Database['public']['Tables']['media_items']['Row']
@@ -49,13 +50,12 @@ export function AlbumDetailScreen() {
   const [album, setAlbum] = useState<Album | null>(null)
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
-  const fetchMediaItems = async (currentAlbumId: string) => {
+  const fetchMediaItems = useCallback(async (currentAlbumId: string) => {
     const { data } = await supabase
       .from('media_items')
       .select('*')
@@ -67,7 +67,7 @@ export function AlbumDetailScreen() {
       .order('sort_key', { ascending: true })
       .order('id', { ascending: true })
     setMediaItems(data ?? [])
-  }
+  }, [])
 
   useEffect(() => {
     if (!albumId) return
@@ -80,7 +80,15 @@ export function AlbumDetailScreen() {
       setAlbum(data)
       setLoading(false)
     })
-  }, [albumId])
+  }, [albumId, fetchMediaItems])
+
+  // The queue calls this once the batch comes to rest, rather than after each
+  // file: a refresh per upload would refetch the whole album dozens of times.
+  const handleUploadsSettled = useCallback(() => {
+    if (albumId) void fetchMediaItems(albumId)
+  }, [albumId, fetchMediaItems])
+
+  const uploads = useUploadQueue(albumId, session?.user.id, handleUploadsSettled)
 
   const handleDeleteAlbum = async () => {
     if (!albumId) return
@@ -103,23 +111,11 @@ export function AlbumDetailScreen() {
     navigate('/', { replace: true })
   }
 
-  const handleFilesSelected = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !albumId || !session) return
-    setUploading(true)
-    setErrorMessage(null)
-
-    const results = await Promise.allSettled(
-      Array.from(files).map((file) => uploadMediaItem(file, albumId, session.user.id)),
-    )
-    const failed = results.filter((result) => result.status === 'rejected')
-    if (failed.length > 0) {
-      failed.forEach((result) => console.error('upload failed', result.reason))
-      setErrorMessage(`${failed.length}件のアップロードに失敗しました。`)
-    }
-
-    setUploading(false)
+  const handleFilesSelected = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    uploads.enqueue(files)
+    // Cleared so picking the same file again still fires a change event.
     if (fileInputRef.current) fileInputRef.current.value = ''
-    await fetchMediaItems(albumId)
   }
 
   return (
@@ -142,9 +138,11 @@ export function AlbumDetailScreen() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              {/* Stays enabled while a batch runs -- more files just join the
+                  queue, and the tray is where the progress lives now. */}
+              <Button onClick={() => fileInputRef.current?.click()}>
                 <ImagePlus />
-                {uploading ? 'アップロード中…' : '追加'}
+                追加
               </Button>
               <Button
                 variant="outline"
@@ -181,6 +179,8 @@ export function AlbumDetailScreen() {
           )}
         </>
       )}
+
+      <UploadTray queue={uploads} />
     </div>
   )
 }
