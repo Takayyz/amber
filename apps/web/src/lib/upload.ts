@@ -144,5 +144,13 @@ export async function uploadMediaItem(
     storageKey: presigned.storageKey,
     mediaType: presigned.mediaType,
   }
+
+  // A stop landing just as the PUT finished would otherwise still write the
+  // row, and the tray would say the upload was cancelled while the photo
+  // appeared in the album anyway.
+  if (options.signal.aborted) {
+    throw new UploadError('中止しました', { retryable: false, stored })
+  }
+
   await recordMediaItem(file, albumId, userId, stored)
 }
