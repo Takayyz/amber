@@ -13,6 +13,7 @@
     "test": "pnpm --filter api test",
     "test:watch": "pnpm --filter api test:watch",
     "typecheck": "pnpm -r typecheck",
+    "check:svg": "pnpm --filter web check:svg",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",

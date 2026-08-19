@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && node scripts/check-svg.mjs && vite build",
     "lint": "oxlint",
+    "check:svg": "node scripts/check-svg.mjs",
     "typecheck": "tsc -b",
     "preview": "vite preview"
   },

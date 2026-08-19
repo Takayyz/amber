@@ -144,6 +144,18 @@ Cancellation is only offered while an invitation is `pending`, which keeps it cl
 - Exif GPS metadata (lat/lng/altitude) is captured into the schema at upload time for future use, even though no MVP feature consumes it yet. Downloads serve the original file unmodified — GPS data is not stripped server-side, matching the direct browser↔R2 download model; members are trusted with how they re-share downloaded files outside the app.
 - **"New since last visit"**: with no push/email notifications, each member's last-seen timestamp is tracked so photos/albums added since then get a "new" badge — the minimum-effort substitute for a notification system.
 
+## Brand
+
+The mark is a hexagon drawn as **three separate arcs** around a **smaller hexagon of the same shape**, with the top arc in a contrasting colour. Each part carries one of the ideas in "Capture the light, keep the moment":
+
+- **The core repeats the outer shape** — amber keeps what it holds in the form it went in. Preserving, not just storing.
+- **The enclosure is made of several pieces, not one line** — the space exists because people gather to make it. The gaps between them are where someone new is let in, which is what an invite-only service needs to leave room for.
+- **One arc is a different colour** — the people who gather are not interchangeable. Permissions are flat, but the members are not identical.
+
+Two colours per theme, chosen so the mark never depends on the UI's own palette: amber `#B87514` on light / `#F0B04A` on dark, with the accent arc in turquoise `#0CA678` / `#2DD4A7`. Turquoise sits opposite amber on the wheel, which is what keeps the accent readable when the mark is scaled down to a 16px favicon — a warmer accent collapses back into the amber at that size.
+
+`favicon.svg` carries both palettes in one file via `prefers-color-scheme`, so the tab icon follows the browser theme. Every colour is also set as an attribute, so a renderer that ignores the stylesheet still gets the light palette rather than black. An SVG is XML, which fails harder than HTML: a malformed one is still served with a 200 and the right content-type, and simply never renders, so the only symptom is that the icon never changes. `pnpm check:svg` guards the cases that cause it (a double hyphen inside a comment, a bare ampersand, an unclosed tag) and runs as part of the web build. The PNGs for the manifest cannot do that — a manifest icon is one fixed image — so they are rendered on the dark background `#14110E`, which is also the manifest's `theme_color` and `background_color`. Amber reads as something that glows in the dark, and a dark tile holds its edge against any wallpaper where a white one would dissolve. The maskable icon keeps the mark inside the middle 80%, since Android crops it to a circle or a squircle depending on the launcher.
+
 ## Data Model
 
 ```mermaid
