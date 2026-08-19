@@ -6,14 +6,18 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { presignGet } from '@/lib/api'
 import { useUploadQueue } from '@/lib/use-upload-queue'
+import { cursorOf, fetchMediaPage, type MediaItem } from '@/lib/media-page'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
 import { UploadTray } from '@/components/upload-tray'
 
 type Album = Database['public']['Tables']['albums']['Row']
-type MediaItem = Database['public']['Tables']['media_items']['Row']
 
 const ACCEPTED_TYPES = Object.keys({ ...PHOTO_EXTENSIONS, ...VIDEO_EXTENSIONS }).join(',')
+
+// One screen's worth on a phone is 3 columns of roughly 4 rows; a page a few
+// times that keeps the sentinel from firing again the moment it is reached.
+const PAGE_SIZE = 36
 
 function MediaThumbnail({ item }: { item: MediaItem }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -52,22 +56,43 @@ export function AlbumDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const loadingMoreRef = useRef(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
+  // Reloads from the top. Used for the first paint and after an upload batch:
+  // a new photo can land anywhere in capture order, so patching the tail would
+  // put it in the wrong place.
   const fetchMediaItems = useCallback(async (currentAlbumId: string) => {
-    const { data } = await supabase
-      .from('media_items')
-      .select('*')
-      .eq('album_id', currentAlbumId)
-      .is('deleted_at', null)
-      // The id tiebreaker is what keeps this grid and the detail view in the
-      // same order -- sort_key ties on burst shots, which share an Exif
-      // capture time to the second.
-      .order('sort_key', { ascending: true })
-      .order('id', { ascending: true })
-    setMediaItems(data ?? [])
+    try {
+      const page = await fetchMediaPage(currentAlbumId, PAGE_SIZE)
+      setMediaItems(page.items)
+      setHasMore(page.hasMore)
+    } catch {
+      setErrorMessage('写真を読み込めませんでした。')
+    }
   }, [])
+
+  const loadMore = useCallback(async () => {
+    // The ref, not the state: two scroll events in the same frame would both
+    // see the old value and fetch the same page twice.
+    if (!albumId || loadingMoreRef.current || !hasMore) return
+    const last = mediaItems.at(-1)
+    if (!last) return
+
+    loadingMoreRef.current = true
+    try {
+      const page = await fetchMediaPage(albumId, PAGE_SIZE, cursorOf(last))
+      setMediaItems((current) => [...current, ...page.items])
+      setHasMore(page.hasMore)
+    } catch {
+      setErrorMessage('続きを読み込めませんでした。')
+    } finally {
+      loadingMoreRef.current = false
+    }
+  }, [albumId, hasMore, mediaItems])
 
   useEffect(() => {
     if (!albumId) return
@@ -81,6 +106,24 @@ export function AlbumDetailScreen() {
       setLoading(false)
     })
   }, [albumId, fetchMediaItems])
+
+  // Watches a marker below the grid. rootMargin starts the fetch before it is
+  // actually on screen, so the next rows are usually there by the time the
+  // member scrolls to where they belong.
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel || !hasMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore()
+      },
+      { rootMargin: '400px' },
+    )
+    observer.observe(sentinel)
+
+    return () => observer.disconnect()
+  }, [hasMore, loadMore])
 
   // The queue calls this once the batch comes to rest, rather than after each
   // file: a refresh per upload would refetch the whole album dozens of times.
@@ -169,13 +212,20 @@ export function AlbumDetailScreen() {
           {mediaItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">まだ写真がありません。</p>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {mediaItems.map((item) => (
-                <Link key={item.id} to={`/albums/${albumId}/items/${item.id}`} className="block">
-                  <MediaThumbnail item={item} />
-                </Link>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {mediaItems.map((item) => (
+                  <Link key={item.id} to={`/albums/${albumId}/items/${item.id}`} className="block">
+                    <MediaThumbnail item={item} />
+                  </Link>
+                ))}
+              </div>
+              {hasMore && (
+                <div ref={sentinelRef} className="py-4 text-center text-sm text-muted-foreground">
+                  読み込み中…
+                </div>
+              )}
+            </>
           )}
         </>
       )}

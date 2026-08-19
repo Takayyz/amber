@@ -4,13 +4,13 @@ import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-rea
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
-import type { Database } from '@/lib/database.types'
-
-// The joined member rides along with the row; generated types cover the table
-// itself but not what an embedded select adds to it.
-type MediaItem = Database['public']['Tables']['media_items']['Row'] & {
-  uploader: { display_name: string | null } | null
-}
+import {
+  cursorOf,
+  fetchMediaBefore,
+  fetchMediaItem,
+  fetchMediaPage,
+  type MediaItem,
+} from '@/lib/media-page'
 
 const SWIPE_THRESHOLD_PX = 50
 // The Worker signs for an hour; re-sign short of that so a long-lived tab
@@ -46,7 +46,15 @@ interface CachedUrl {
 export function MediaDetailScreen() {
   const { albumId, mediaItemId } = useParams<{ albumId: string; mediaItemId: string }>()
   const navigate = useNavigate()
-  const [items, setItems] = useState<MediaItem[]>([])
+  // Only the item on screen and its two neighbours, rather than the whole
+  // album: this route is bookmarkable, so it can be opened at the five
+  // hundredth photo without the grid ever having been visited.
+  const [current, setCurrent] = useState<MediaItem | null>(null)
+  const [previous, setPrevious] = useState<MediaItem | null>(null)
+  const [next, setNext] = useState<MediaItem | null>(null)
+  // Items already fetched, so stepping onto a neighbour shows it at once
+  // instead of waiting to re-fetch what is already in hand.
+  const known = useRef(new Map<string, MediaItem>())
   const [loading, setLoading] = useState(true)
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -60,40 +68,60 @@ export function MediaDetailScreen() {
   const [actionError, setActionError] = useState<string | null>(null)
 
   const albumPath = `/albums/${albumId}`
-  const index = items.findIndex((item) => item.id === mediaItemId)
-  const current = index >= 0 ? items[index] : null
-  const previous = index > 0 ? items[index - 1] : null
-  const next = index >= 0 && index < items.length - 1 ? items[index + 1] : null
+
+  // A different album invalidates everything held from the last one.
+  useEffect(() => {
+    known.current.clear()
+  }, [albumId])
 
   useEffect(() => {
-    if (!albumId) return
+    if (!albumId || !mediaItemId) return
     let cancelled = false
 
-    setLoading(true)
-    supabase
-      .from('media_items')
-      // The uploader comes along on the same query: the footer names them, and
-      // a second round trip per photo would show the name late on every step
-      // through the album.
-      .select('*, uploader:members!media_items_uploaded_by_fkey(display_name)')
-      .eq('album_id', albumId)
-      .is('deleted_at', null)
-      // sort_key alone is not a total order: Exif capture time is only
-      // second-precision, so burst shots share one. The grid runs the same
-      // pair of keys, and the two listings have to agree or a thumbnail
-      // opens its neighbour.
-      .order('sort_key', { ascending: true })
-      .order('id', { ascending: true })
-      .then(({ data }) => {
-        if (cancelled) return
-        setItems(data ?? [])
-        setLoading(false)
-      })
+    // Stepping onto a neighbour already has the item, so the photo swaps
+    // immediately and only the new neighbours are fetched.
+    const inHand = known.current.get(mediaItemId) ?? null
+    setCurrent(inHand)
+    setLoading(inHand === null)
+    if (!inHand) {
+      setPrevious(null)
+      setNext(null)
+    }
+
+    const load = async () => {
+      const item = inHand ?? (await fetchMediaItem(albumId, mediaItemId))
+      if (cancelled) return
+
+      setCurrent(item)
+      setLoading(false)
+      if (!item) return
+      known.current.set(item.id, item)
+
+      // sort_key alone is not a total order -- Exif capture time is only
+      // second-precision, so burst shots share one. The cursor carries the id
+      // as well, which is what stops a tied group from being skipped or
+      // repeated. The grid pages on the same pair, so the two agree.
+      const [before, after] = await Promise.all([
+        fetchMediaBefore(albumId, 1, cursorOf(item)),
+        fetchMediaPage(albumId, 1, cursorOf(item)),
+      ])
+      if (cancelled) return
+
+      setPrevious(before[0] ?? null)
+      setNext(after.items[0] ?? null)
+      for (const neighbour of [...before, ...after.items]) {
+        known.current.set(neighbour.id, neighbour)
+      }
+    }
+
+    load().catch(() => {
+      if (!cancelled) setLoading(false)
+    })
 
     return () => {
       cancelled = true
     }
-  }, [albumId])
+  }, [albumId, mediaItemId])
 
   const resolveUrl = useCallback(async (storageKey: string): Promise<string> => {
     const cached = urlCache.current.get(storageKey)
@@ -213,10 +241,9 @@ export function MediaDetailScreen() {
       return
     }
 
-    // Drop it locally too. The album is fetched once per albumId, so leaving
-    // it in would keep it in the counter and let the arrows step back onto
-    // something that is no longer in the album.
-    setItems((previousItems) => previousItems.filter((item) => item.id !== current.id))
+    // Forget it locally too, or stepping back onto it would show the copy in
+    // hand rather than re-reading and finding it gone.
+    known.current.delete(current.id)
 
     // Whichever neighbour is left is a better landing spot than an item that
     // is no longer there.
@@ -290,9 +317,6 @@ export function MediaDetailScreen() {
         </Link>
         {current && (
           <>
-            <span className="text-sm text-neutral-400">
-              {index + 1} / {items.length}
-            </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
