@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="apps/web/public/favicon.svg" alt="Amber" width="120" height="120">
+</p>
+
 # amber
 
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
