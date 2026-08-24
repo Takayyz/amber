@@ -1,12 +1,29 @@
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
 
-// The uploader rides along on every page so the detail footer can name them
-// without a second round trip per photo.
-const SELECT_WITH_UPLOADER = '*, uploader:members!media_items_uploaded_by_fkey(display_name)'
+// The uploader and the tags ride along on every page so the detail footer can
+// show them without a second round trip per photo.
+const SELECT_WITH_UPLOADER =
+  '*, uploader:members!media_items_uploaded_by_fkey(display_name), media_item_tags(tags(id, name))'
+
+export interface MediaTag {
+  id: string
+  name: string
+}
 
 export type MediaItem = Database['public']['Tables']['media_items']['Row'] & {
   uploader: { display_name: string | null } | null
+  // Going through the join table is what nests it twice; `tagsOf` is how
+  // callers read it.
+  media_item_tags: { tags: MediaTag | null }[]
+}
+
+/** The item's tags, flattened out of the join table and ordered by name. */
+export function tagsOf(item: MediaItem): MediaTag[] {
+  return (item.media_item_tags ?? [])
+    .map((row) => row.tags)
+    .filter((tag): tag is MediaTag => tag !== null)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ja'))
 }
 
 /**

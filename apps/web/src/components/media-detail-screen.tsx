@@ -4,12 +4,15 @@ import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-rea
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
+import { TagEditor } from '@/components/tag-editor'
 import {
   cursorOf,
   fetchMediaBefore,
   fetchMediaItem,
   fetchMediaPage,
+  tagsOf,
   type MediaItem,
+  type MediaTag,
 } from '@/lib/media-page'
 
 const SWIPE_THRESHOLD_PX = 50
@@ -36,6 +39,13 @@ function formatTakenAt(item: MediaItem): string {
 // those as navigation would seek and jump away at the same time.
 function isFromVideo(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('video') !== null
+}
+
+// The tag input owns every key it receives: an arrow is a text cursor rather
+// than the next photo, and Escape closes the suggestions rather than the
+// viewer someone is still typing into.
+function isFromTextInput(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('input, textarea') !== null
 }
 
 interface CachedUrl {
@@ -251,6 +261,16 @@ export function MediaDetailScreen() {
     navigate(remaining ? `${albumPath}/items/${remaining.id}` : albumPath, { replace: true })
   }
 
+  const handleTagsChange = (tags: MediaTag[]) => {
+    if (!current) return
+
+    const updated: MediaItem = { ...current, media_item_tags: tags.map((tag) => ({ tags: tag })) }
+    setCurrent(updated)
+    // The neighbour cache holds its own copy of this item, so leaving it
+    // behind would bring the old tags back on the way in from the next photo.
+    known.current.set(updated.id, updated)
+  }
+
   const step = useCallback(
     (target: MediaItem | null) => {
       // Replace rather than push: every item keeps its own URL, but a run of
@@ -268,6 +288,7 @@ export function MediaDetailScreen() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isFromTextInput(event.target)) return
       if (event.key === 'Escape') {
         close()
         return
@@ -401,8 +422,16 @@ export function MediaDetailScreen() {
             </button>
           </div>
 
-          <footer className="p-4 text-center text-sm text-neutral-400">
-            {formatTakenAt(current)} · by {uploaderLabel(current)}
+          <footer className="space-y-2 p-4 text-center text-sm text-neutral-400">
+            <p>
+              {formatTakenAt(current)} · by {uploaderLabel(current)}
+            </p>
+            <TagEditor
+              mediaItemId={current.id}
+              tags={tagsOf(current)}
+              onChange={handleTagsChange}
+              onError={setActionError}
+            />
           </footer>
         </>
       )}
