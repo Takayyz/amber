@@ -68,6 +68,13 @@ export interface MediaPage {
 }
 
 /**
+ * One screen's worth on a phone is 3 columns of roughly 4 rows; a page a few
+ * times that keeps the sentinel from firing again the moment it is reached.
+ * The album grid and the search results page at the same size.
+ */
+export const PAGE_SIZE = 36
+
+/**
  * One page of an album, oldest first. Passing no cursor starts from the top.
  */
 export async function fetchMediaPage(
@@ -112,4 +119,77 @@ export async function fetchMediaItem(albumId: string, itemId: string): Promise<M
 
   if (error) throw error
   return (data as MediaItem | null) ?? null
+}
+
+/**
+ * One page of a tag search, in the same order as an album.
+ *
+ * The work is a database function rather than a query because an OR across
+ * tags joins `media_item_tags` and returns a photo once per tag it matched
+ * (README design notes). Tags are named rather than identified, so the URL's
+ * own `?tags=` can be handed straight through.
+ */
+async function searchPage(
+  tagNames: string[],
+  limit: number,
+  cursor: MediaCursor | undefined,
+  backwards: boolean,
+): Promise<MediaItem[]> {
+  const { data, error } = await supabase
+    .rpc('search_media_items', {
+      tag_names: tagNames,
+      cursor_sort_key: cursor?.sortKey,
+      cursor_id: cursor?.id,
+      page_limit: limit,
+      backwards,
+    })
+    // `setof media_items` is what lets the embedding be the same as everywhere
+    // else; the generated types don't carry it, hence the cast.
+    .select(SELECT_WITH_UPLOADER)
+
+  if (error) throw error
+  return (data ?? []) as unknown as MediaItem[]
+}
+
+export async function searchMediaPage(
+  tagNames: string[],
+  limit: number,
+  cursor?: MediaCursor,
+): Promise<MediaPage> {
+  const items = await searchPage(tagNames, limit, cursor, false)
+  return { items, hasMore: items.length === limit }
+}
+
+/** The matches just before `cursor`, returned back in display order. */
+export async function searchMediaBefore(
+  tagNames: string[],
+  limit: number,
+  cursor: MediaCursor,
+): Promise<MediaItem[]> {
+  const items = await searchPage(tagNames, limit, cursor, true)
+  return items.reverse()
+}
+
+/**
+ * Where a viewer's previous and next come from. The detail view steps through
+ * whatever list it was opened out of -- an album, or a set of search results
+ * spanning several -- and both are paged on the same cursor.
+ */
+export interface MediaSource {
+  before: (limit: number, cursor: MediaCursor) => Promise<MediaItem[]>
+  after: (limit: number, cursor?: MediaCursor) => Promise<MediaPage>
+}
+
+export function albumSource(albumId: string): MediaSource {
+  return {
+    before: (limit, cursor) => fetchMediaBefore(albumId, limit, cursor),
+    after: (limit, cursor) => fetchMediaPage(albumId, limit, cursor),
+  }
+}
+
+export function searchSource(tagNames: string[]): MediaSource {
+  return {
+    before: (limit, cursor) => searchMediaBefore(tagNames, limit, cursor),
+    after: (limit, cursor) => searchMediaPage(tagNames, limit, cursor),
+  }
 }

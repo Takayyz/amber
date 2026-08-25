@@ -18,6 +18,7 @@
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
     "supabase:reset": "supabase db reset",
+    "supabase:migrate": "supabase migration up --local",
     "supabase:test": "supabase test db --local",
     "supabase:gen-types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
     "setup:r2": "bash apps/api/scripts/setup-r2.sh",

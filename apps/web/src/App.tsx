@@ -4,6 +4,7 @@ import { LoginScreen } from '@/components/login-screen'
 import { HomeScreen } from '@/components/home-screen'
 import { AlbumDetailScreen } from '@/components/album-detail-screen'
 import { MediaDetailScreen } from '@/components/media-detail-screen'
+import { SearchScreen } from '@/components/search-screen'
 import { TrashScreen } from '@/components/trash-screen'
 
 function AppContent() {
@@ -22,6 +23,7 @@ function AppContent() {
       <Route path="/" element={<HomeScreen />} />
       <Route path="/albums/:albumId" element={<AlbumDetailScreen />} />
       <Route path="/albums/:albumId/items/:mediaItemId" element={<MediaDetailScreen />} />
+      <Route path="/search" element={<SearchScreen />} />
       <Route path="/trash" element={<TrashScreen />} />
     </Routes>
   )

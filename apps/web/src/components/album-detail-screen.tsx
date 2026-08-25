@@ -1,52 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ImagePlus, Play, Trash2 } from 'lucide-react'
+import { ImagePlus, Trash2 } from 'lucide-react'
 import { PHOTO_EXTENSIONS, VIDEO_EXTENSIONS } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
-import { presignGet } from '@/lib/api'
 import { useUploadQueue } from '@/lib/use-upload-queue'
-import { cursorOf, fetchMediaPage, type MediaItem } from '@/lib/media-page'
+import { cursorOf, fetchMediaPage, PAGE_SIZE, type MediaItem } from '@/lib/media-page'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
+import { MediaThumbnail } from '@/components/media-thumbnail'
 import { UploadTray } from '@/components/upload-tray'
 
 type Album = Database['public']['Tables']['albums']['Row']
 
 const ACCEPTED_TYPES = Object.keys({ ...PHOTO_EXTENSIONS, ...VIDEO_EXTENSIONS }).join(',')
-
-// One screen's worth on a phone is 3 columns of roughly 4 rows; a page a few
-// times that keeps the sentinel from firing again the moment it is reached.
-const PAGE_SIZE = 36
-
-function MediaThumbnail({ item }: { item: MediaItem }) {
-  const [url, setUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (item.media_type === 'video') return
-    let cancelled = false
-    presignGet(item.storage_key).then((signedUrl) => {
-      if (!cancelled) setUrl(signedUrl)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [item.storage_key, item.media_type])
-
-  if (item.media_type === 'video') {
-    return (
-      <div className="flex aspect-square items-center justify-center rounded-md bg-muted">
-        <Play className="size-6 text-muted-foreground" />
-      </div>
-    )
-  }
-
-  return url ? (
-    <img src={url} alt="" className="aspect-square rounded-md object-cover" />
-  ) : (
-    <div className="aspect-square animate-pulse rounded-md bg-muted" />
-  )
-}
 
 export function AlbumDetailScreen() {
   const { albumId } = useParams<{ albumId: string }>()

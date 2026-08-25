@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
 import { TagEditor } from '@/components/tag-editor'
 import {
+  albumSource,
   cursorOf,
-  fetchMediaBefore,
   fetchMediaItem,
-  fetchMediaPage,
+  searchSource,
   tagsOf,
   type MediaItem,
   type MediaTag,
@@ -55,7 +55,20 @@ interface CachedUrl {
 
 export function MediaDetailScreen() {
   const { albumId, mediaItemId } = useParams<{ albumId: string; mediaItemId: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+
+  // Opened out of a search, the viewer steps through those results rather
+  // than through the album this one photo happens to sit in.
+  const searching = searchParams.get('from') === 'search'
+  const tagNames = useMemo(() => searchParams.getAll('tags'), [searchParams])
+  const source = useMemo(
+    () => (searching ? searchSource(tagNames) : albumSource(albumId ?? '')),
+    [searching, tagNames, albumId],
+  )
+  // Changes exactly when the list being stepped through does, which is when
+  // everything held from the previous one stops applying.
+  const contextKey = searching ? `search:${JSON.stringify(tagNames)}` : `album:${albumId}`
   // Only the item on screen and its two neighbours, rather than the whole
   // album: this route is bookmarkable, so it can be opened at the five
   // hundredth photo without the grid ever having been visited.
@@ -77,12 +90,22 @@ export function MediaDetailScreen() {
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const albumPath = `/albums/${albumId}`
+  // Where closing lands: whichever listing the photo was opened out of.
+  const backPath = useMemo(() => {
+    if (!searching) return `/albums/${albumId}`
+    const params = new URLSearchParams()
+    for (const tag of tagNames) params.append('tags', tag)
+    return `/search?${params.toString()}`
+  }, [searching, tagNames, albumId])
 
-  // A different album invalidates everything held from the last one.
+  // Carried onto every step, so the photo stepped onto is still being read
+  // out of the same list.
+  const itemQuery = searching ? `?${searchParams.toString()}` : ''
+
+  // A different list invalidates everything held from the last one.
   useEffect(() => {
     known.current.clear()
-  }, [albumId])
+  }, [contextKey])
 
   useEffect(() => {
     if (!albumId || !mediaItemId) return
@@ -112,8 +135,8 @@ export function MediaDetailScreen() {
       // as well, which is what stops a tied group from being skipped or
       // repeated. The grid pages on the same pair, so the two agree.
       const [before, after] = await Promise.all([
-        fetchMediaBefore(albumId, 1, cursorOf(item)),
-        fetchMediaPage(albumId, 1, cursorOf(item)),
+        source.before(1, cursorOf(item)),
+        source.after(1, cursorOf(item)),
       ])
       if (cancelled) return
 
@@ -131,7 +154,7 @@ export function MediaDetailScreen() {
     return () => {
       cancelled = true
     }
-  }, [albumId, mediaItemId])
+  }, [albumId, mediaItemId, source])
 
   const resolveUrl = useCallback(async (storageKey: string): Promise<string> => {
     const cached = urlCache.current.get(storageKey)
@@ -258,7 +281,10 @@ export function MediaDetailScreen() {
     // Whichever neighbour is left is a better landing spot than an item that
     // is no longer there.
     const remaining = next ?? previous
-    navigate(remaining ? `${albumPath}/items/${remaining.id}` : albumPath, { replace: true })
+    navigate(
+      remaining ? `/albums/${remaining.album_id}/items/${remaining.id}${itemQuery}` : backPath,
+      { replace: true },
+    )
   }
 
   const handleTagsChange = (tags: MediaTag[]) => {
@@ -273,18 +299,22 @@ export function MediaDetailScreen() {
 
   const step = useCallback(
     (target: MediaItem | null) => {
+      // The album comes from the target rather than the URL: a search steps
+      // across albums, so the next photo need not live in this one.
       // Replace rather than push: every item keeps its own URL, but a run of
-      // arrow presses should not bury the album under a stack of Back steps.
-      if (target) navigate(`${albumPath}/items/${target.id}`, { replace: true })
+      // arrow presses should not bury the list under a stack of Back steps.
+      if (target) {
+        navigate(`/albums/${target.album_id}/items/${target.id}${itemQuery}`, { replace: true })
+      }
     },
-    [albumPath, navigate],
+    [itemQuery, navigate],
   )
 
   const close = useCallback(() => {
     // Also a replace, for the same reason: opening an item is the one step
     // worth keeping, so leaving should undo it rather than stack on top.
-    navigate(albumPath, { replace: true })
-  }, [albumPath, navigate])
+    navigate(backPath, { replace: true })
+  }, [backPath, navigate])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -329,9 +359,9 @@ export function MediaDetailScreen() {
     >
       <header className="flex items-center justify-between p-4">
         <Link
-          to={albumPath}
+          to={backPath}
           replace
-          aria-label="アルバムに戻る"
+          aria-label={searching ? '検索結果に戻る' : 'アルバムに戻る'}
           className="rounded-md p-2 hover:bg-white/10"
         >
           <X className="size-5" />
@@ -380,8 +410,8 @@ export function MediaDetailScreen() {
       ) : !current ? (
         <div className="flex-1 place-content-center text-center text-sm text-neutral-400">
           <p>写真が見つかりません。</p>
-          <Link to={albumPath} replace className="underline">
-            アルバムに戻る
+          <Link to={backPath} replace className="underline">
+            {searching ? '検索結果に戻る' : 'アルバムに戻る'}
           </Link>
         </div>
       ) : (

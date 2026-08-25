@@ -243,6 +243,34 @@ export type Database = {
     }
     Functions: {
       is_member: { Args: never; Returns: boolean }
+      search_media_items: {
+        Args: {
+          backwards?: boolean
+          cursor_id?: string
+          cursor_sort_key?: string
+          page_limit?: number
+          tag_names: string[]
+        }
+        Returns: {
+          album_id: string
+          captured_at: string | null
+          deleted_at: string | null
+          gps_lat: number | null
+          gps_lng: number | null
+          id: string
+          media_type: string
+          sort_key: string | null
+          storage_key: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "media_items"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       [_ in never]: never

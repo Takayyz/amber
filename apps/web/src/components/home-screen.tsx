@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
+import { Search, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { presignGet } from '@/lib/api'
@@ -106,6 +106,14 @@ export function HomeScreen() {
       <header className="flex items-center justify-between gap-2">
         <ProfileDialog />
         <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="タグで探す"
+            render={<Link to="/search" />}
+          >
+            <Search />
+          </Button>
           <Button variant="outline" size="icon" aria-label="ゴミ箱" render={<Link to="/trash" />}>
             <Trash2 />
           </Button>
