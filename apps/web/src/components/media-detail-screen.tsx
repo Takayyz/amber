@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
 import { TagEditor } from '@/components/tag-editor'
+import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   albumSource,
@@ -418,9 +419,9 @@ export function MediaDetailScreen() {
       {actionError && <p className="px-4 pb-2 text-center text-sm text-red-400">{actionError}</p>}
 
       {loading ? (
-        <p className="flex-1 place-content-center text-center text-sm text-neutral-400">
-          読み込み中…
-        </p>
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner className="size-6 text-neutral-400" />
+        </div>
       ) : !current ? (
         <div className="flex-1 place-content-center text-center text-sm text-neutral-400">
           <p>写真が見つかりません。</p>
@@ -447,7 +448,7 @@ export function MediaDetailScreen() {
                   読み込めませんでした。時間をおいて開き直してください。
                 </p>
               ) : !url ? (
-                <p className="text-sm text-neutral-400">読み込み中…</p>
+                <Spinner className="size-6 text-neutral-400" />
               ) : current.media_type === 'video' ? (
                 <video src={url} controls playsInline className="max-h-full max-w-full" />
               ) : (

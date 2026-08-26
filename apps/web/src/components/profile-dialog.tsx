@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { displayNameOrNull } from '@/lib/member-name'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -117,6 +118,7 @@ export function ProfileDialog({ open, onOpenChange, displayName, onSaved }: Prof
 
           <DialogFooter>
             <Button type="submit" disabled={saving || clearsExistingName}>
+              {saving && <Spinner />}
               {saving ? '保存中…' : '保存'}
             </Button>
           </DialogFooter>

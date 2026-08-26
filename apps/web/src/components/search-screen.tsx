@@ -8,8 +8,10 @@ import {
   type MediaItem,
   type MediaTag,
 } from '@/lib/media-page'
+import { MediaGridSkeleton } from '@/components/loading-skeletons'
 import { MediaThumbnail } from '@/components/media-thumbnail'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 
 // Repeated rather than comma-joined: a tag is free text and may contain a
 // comma itself, which a split would then tear in half.
@@ -174,7 +176,7 @@ export function SearchScreen() {
       {selected.length === 0 ? (
         <p className="text-sm text-muted-foreground">タグを選ぶと写真が絞り込まれます。</p>
       ) : loading ? (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <MediaGridSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">該当する写真がありません。</p>
       ) : (
@@ -191,8 +193,8 @@ export function SearchScreen() {
             ))}
           </div>
           {hasMore && (
-            <div ref={sentinelRef} className="py-4 text-center text-sm text-muted-foreground">
-              読み込み中…
+            <div ref={sentinelRef} className="flex justify-center py-4">
+              <Spinner className="text-muted-foreground" />
             </div>
           )}
         </>

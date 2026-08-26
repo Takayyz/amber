@@ -8,7 +8,9 @@ import { useUploadQueue } from '@/lib/use-upload-queue'
 import { cursorOf, fetchMediaPage, PAGE_SIZE, type MediaItem } from '@/lib/media-page'
 import type { Database } from '@/lib/database.types'
 import { AppHeader } from '@/components/app-header'
+import { MediaGridSkeleton } from '@/components/loading-skeletons'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { MediaThumbnail } from '@/components/media-thumbnail'
 import { UploadTray } from '@/components/upload-tray'
 import {
@@ -174,7 +176,7 @@ export function AlbumDetailScreen() {
       </AppHeader>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <MediaGridSkeleton />
       ) : !album ? (
         <p className="text-sm text-muted-foreground">アルバムが見つかりません。</p>
       ) : (
@@ -237,8 +239,10 @@ export function AlbumDetailScreen() {
                 ))}
               </div>
               {hasMore && (
-                <div ref={sentinelRef} className="py-4 text-center text-sm text-muted-foreground">
-                  読み込み中…
+                // A spinner rather than more skeletons: the grid above is
+                // already there, and this only says more is on the way.
+                <div ref={sentinelRef} className="flex justify-center py-4">
+                  <Spinner className="text-muted-foreground" />
                 </div>
               )}
             </>
@@ -262,6 +266,7 @@ export function AlbumDetailScreen() {
           <DialogFooter>
             <DialogClose render={<Button variant="outline">キャンセル</Button>} />
             <Button variant="destructive" disabled={deleting} onClick={handleDeleteAlbum}>
+              {deleting && <Spinner />}
               {deleting ? '削除中…' : '削除'}
             </Button>
           </DialogFooter>

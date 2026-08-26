@@ -7,6 +7,7 @@ import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Dialog,
   DialogContent,
@@ -167,6 +168,7 @@ export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps)
                 disabled={sending}
               />
               <Button type="submit" disabled={sending}>
+                {sending && <Spinner />}
                 {sending ? '送信中…' : '送信'}
               </Button>
             </div>
@@ -178,7 +180,9 @@ export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps)
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">招待中</p>
           {listState === 'loading' ? (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
+            <div className="flex justify-center py-2">
+              <Spinner className="text-muted-foreground" />
+            </div>
           ) : listState === 'failed' ? (
             <p className="text-sm text-destructive">
               招待中の一覧を取得できませんでした。開き直してください。

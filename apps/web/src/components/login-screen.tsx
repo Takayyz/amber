@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Spinner } from '@/components/ui/spinner'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 type Status = 'idle' | 'sending' | 'sent' | 'error'
@@ -57,6 +58,7 @@ export function LoginScreen() {
                 </p>
               )}
               <Button type="submit" disabled={status === 'sending'}>
+                {status === 'sending' && <Spinner />}
                 {status === 'sending' ? '送信中…' : 'ログインリンクを送る'}
               </Button>
             </form>

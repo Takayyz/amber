@@ -6,6 +6,8 @@ import { presignGet } from '@/lib/api'
 import { isSince, visitReference } from '@/lib/last-seen'
 import type { Database } from '@/lib/database.types'
 import { AppHeader } from '@/components/app-header'
+import { AlbumCardsSkeleton } from '@/components/loading-skeletons'
+import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -154,6 +156,7 @@ export function HomeScreen() {
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={creating}>
+                  {creating && <Spinner />}
                   {creating ? '作成中…' : '作成'}
                 </Button>
               </DialogFooter>
@@ -163,7 +166,7 @@ export function HomeScreen() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <AlbumCardsSkeleton />
       ) : albums.length === 0 ? (
         <p className="text-sm text-muted-foreground">まだアルバムがありません。</p>
       ) : (

@@ -4,6 +4,7 @@ import { RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
+import { AlbumCardsSkeleton } from '@/components/loading-skeletons'
 import { MediaThumbnail } from '@/components/media-thumbnail'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
@@ -101,7 +102,7 @@ export function TrashScreen() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {state === 'loading' ? (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <AlbumCardsSkeleton />
       ) : state === 'failed' ? (
         <p className="text-sm text-destructive">
           ゴミ箱を読み込めませんでした。開き直してください。
