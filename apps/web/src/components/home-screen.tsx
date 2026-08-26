@@ -4,6 +4,7 @@ import { Search, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { presignGet } from '@/lib/api'
+import { isSince, visitReference } from '@/lib/last-seen'
 import type { Database } from '@/lib/database.types'
 import { InviteDialog } from '@/components/invite-dialog'
 import { ProfileDialog } from '@/components/profile-dialog'
@@ -65,6 +66,9 @@ export function HomeScreen() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [creating, setCreating] = useState(false)
+  // Null until the reference point arrives, and null again for a member whose
+  // first visit this is -- both mean no badges.
+  const [seenBefore, setSeenBefore] = useState<string | null>(null)
 
   const fetchAlbums = async () => {
     const { data } = await supabase
@@ -82,6 +86,22 @@ export function HomeScreen() {
   useEffect(() => {
     fetchAlbums()
   }, [])
+
+  useEffect(() => {
+    if (!session) return
+    let cancelled = false
+
+    visitReference(session.user.id)
+      .then((reference) => {
+        if (!cancelled) setSeenBefore(reference)
+      })
+      // Badges are a convenience; the list itself is unaffected.
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -175,7 +195,14 @@ export function HomeScreen() {
                 <CardHeader className="flex flex-row items-center gap-3">
                   <AlbumCover cover={album.cover} />
                   <div className="min-w-0">
-                    <CardTitle>{album.name}</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <span className="truncate">{album.name}</span>
+                      {isSince(album.updated_at, seenBefore) && (
+                        <span className="size-2 shrink-0 rounded-full bg-primary">
+                          <span className="sr-only">新着あり</span>
+                        </span>
+                      )}
+                    </CardTitle>
                     {album.description && <CardDescription>{album.description}</CardDescription>}
                   </div>
                 </CardHeader>
