@@ -59,8 +59,31 @@ function r2Client(env: Env) {
   })
 }
 
-function r2ObjectUrl(env: Env, key: string) {
-  const url = new URL(`https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET_NAME}/${key}`)
+// Every album id is a uuid from the database; nothing legitimate sends
+// anything else.
+const ALBUM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The signed URL for an object, or null if the key does not stay inside the
+ * bucket.
+ *
+ * The key is interpolated into a URL whose first path segment is the bucket,
+ * so a key that walks upwards signs a request against a different bucket
+ * entirely. The R2 token is scoped to this one and would refuse it, but that
+ * is a dashboard setting nothing here can assert, so the boundary is checked
+ * in code as well.
+ *
+ * The check runs on the normalised path rather than on the key, because
+ * `..`, `%2e%2e`, `%2E%2E` and `.%2e` are all the same double-dot segment to
+ * the URL parser: no string comparison sees every spelling, while whatever
+ * survives normalisation is exactly what R2 will be asked for.
+ */
+function r2ObjectUrl(env: Env, key: string): URL | null {
+  const prefix = `/${env.R2_BUCKET_NAME}/`
+  const url = new URL(`https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com${prefix}${key}`)
+
+  if (!url.pathname.startsWith(prefix)) return null
+
   url.searchParams.set('X-Amz-Expires', '3600')
   return url
 }
@@ -76,6 +99,13 @@ async function handlePresignPut(request: Request, env: Env): Promise<Response> {
     return Response.json({ error: 'albumId, contentType, and fileSize are required' }, { status: 400 })
   }
 
+  // The album id becomes the first segment of the key, so it is checked for
+  // the shape it is supposed to have rather than passed through. r2ObjectUrl
+  // catches an escape either way; this is what makes the refusal legible.
+  if (!ALBUM_ID_PATTERN.test(albumId)) {
+    return Response.json({ error: 'albumId must be a uuid' }, { status: 400 })
+  }
+
   const classification = classifyMedia(contentType)
   if (!classification) {
     return Response.json({ error: 'unsupported content type' }, { status: 400 })
@@ -86,8 +116,13 @@ async function handlePresignPut(request: Request, env: Env): Promise<Response> {
 
   const storageKey = `${albumId}/${crypto.randomUUID()}.${classification.extension}`
 
+  const objectUrl = r2ObjectUrl(env, storageKey)
+  if (!objectUrl) {
+    return Response.json({ error: 'invalid storage key' }, { status: 400 })
+  }
+
   const signed = await r2Client(env).sign(
-    new Request(r2ObjectUrl(env, storageKey), {
+    new Request(objectUrl, {
       method: 'PUT',
       headers: { 'Content-Type': contentType },
     }),
@@ -135,6 +170,9 @@ async function handlePresignGet(request: Request, env: Env): Promise<Response> {
   }
 
   const url = r2ObjectUrl(env, key)
+  if (!url) {
+    return Response.json({ error: 'invalid key' }, { status: 400 })
+  }
 
   // Asking for a filename is what marks the request as a download -- there is
   // no separate flag, since a download is exactly the case that needs a name.

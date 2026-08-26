@@ -75,6 +75,21 @@ describe('uploads', () => {
       expect(response.status).toBe(400)
     })
 
+    // The album id is the first segment of the key, and the bucket is the
+    // segment before it. An id that walks upwards would sign a write against
+    // a different bucket, so only the shape a real id has gets through.
+    it.each([
+      ['a parent segment', '../other-bucket'],
+      ['an encoded parent segment', '%2e%2e/other-bucket'],
+      ['a bare parent', '..'],
+      ['an absolute path', '/other-bucket'],
+      ['anything that is not a uuid', 'not-a-uuid'],
+    ])('refuses an album id that is %s', async (_label, albumId) => {
+      const response = await presignPut({ albumId, contentType: 'image/jpeg', fileSize: SMALL_ENOUGH })
+
+      expect(response.status).toBe(400)
+    })
+
     // The key is filed under the album and carries the extension for the type
     // the caller declared, not one taken from a filename.
     it('files the object under the album with a signed PUT url', async () => {
@@ -96,6 +111,22 @@ describe('uploads', () => {
 
     it('requires a key', async () => {
       const response = await presignGet('')
+
+      expect(response.status).toBe(400)
+    })
+
+    // The bucket is the first path segment, so a key that climbs out of it
+    // would be signed against whatever bucket it landed in. Every spelling
+    // below is the same double-dot segment once the URL parser normalises it,
+    // which is why the check runs on the normalised path rather than the key.
+    it.each([
+      ['a parent segment', '../other-bucket/x.jpg'],
+      ['an encoded parent segment', '%2e%2e/other-bucket/x.jpg'],
+      ['an upper case encoded parent', '%2E%2E/other-bucket/x.jpg'],
+      ['a half-encoded parent', '.%2e/other-bucket/x.jpg'],
+      ['a parent buried mid-key', `${ALBUM_ID}/../../other-bucket/x.jpg`],
+    ])('refuses a key with %s', async (_label, key) => {
+      const response = await presignGet(`key=${encodeURIComponent(key)}`)
 
       expect(response.status).toBe(400)
     })
