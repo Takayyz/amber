@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
 import { TagEditor } from '@/components/tag-editor'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   albumSource,
   cursorOf,
@@ -387,15 +388,28 @@ export function MediaDetailScreen() {
               >
                 <Star className={coverId === current.id ? 'size-5 fill-current' : 'size-5'} />
               </button>
-              <button
-                type="button"
-                aria-label="削除"
-                disabled={busy}
-                onClick={handleDelete}
-                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
-              >
-                <Trash2 className="size-5" />
-              </button>
+              {/* Names what it removes, so it cannot be read as the album
+                  delete that sits one screen back behind the same icon. */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={current.media_type === 'video' ? '動画を削除' : '写真を削除'}
+                      disabled={busy}
+                      onClick={handleDelete}
+                      // Marked out by colour alone. A border on this one and
+                      // not the other two broke the row's rhythm.
+                      className="rounded-md p-2 text-red-400 hover:bg-white/10 disabled:opacity-50"
+                    >
+                      <Trash2 className="size-5" />
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  {current.media_type === 'video' ? '動画を削除' : '写真を削除'}
+                </TooltipContent>
+              </Tooltip>
             </div>
           </>
         )}

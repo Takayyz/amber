@@ -10,6 +10,16 @@ import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
 import { MediaThumbnail } from '@/components/media-thumbnail'
 import { UploadTray } from '@/components/upload-tray'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 type Album = Database['public']['Tables']['albums']['Row']
 
@@ -23,6 +33,10 @@ export function AlbumDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  // Null while the count is in flight, and if it fails -- the dialog then
+  // says what happens without saying how much.
+  const [itemCount, setItemCount] = useState<number | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const loadingMoreRef = useRef(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -100,6 +114,23 @@ export function AlbumDetailScreen() {
 
   const uploads = useUploadQueue(albumId, session?.user.id, handleUploadsSettled)
 
+  // Counted only when the dialog opens. The grid never counts -- it pages on
+  // every scroll -- but a confirmation happens once, and how much is about to
+  // disappear is the thing worth knowing before agreeing to it.
+  const handleConfirmOpenChange = async (next: boolean) => {
+    setConfirmOpen(next)
+    if (!next || !albumId) return
+
+    setItemCount(null)
+    const { count } = await supabase
+      .from('media_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('album_id', albumId)
+      .is('deleted_at', null)
+
+    setItemCount(count ?? null)
+  }
+
   const handleDeleteAlbum = async () => {
     if (!albumId) return
     setDeleting(true)
@@ -115,6 +146,9 @@ export function AlbumDetailScreen() {
 
     setDeleting(false)
     if (error) {
+      // Closed first: the message belongs to the album screen, and would be
+      // behind the dialog if this stayed open.
+      setConfirmOpen(false)
       setErrorMessage('アルバムを削除できませんでした。')
       return
     }
@@ -154,15 +188,25 @@ export function AlbumDetailScreen() {
                 <ImagePlus />
                 追加
               </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="アルバムを削除"
-                disabled={deleting}
-                onClick={handleDeleteAlbum}
-              >
-                <Trash2 />
-              </Button>
+              {/* Destructive rather than outline: this is the one control on
+                  the screen that takes something away, and it sits next to the
+                  one that adds. */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      aria-label="アルバムを削除"
+                      disabled={deleting}
+                      onClick={() => void handleConfirmOpenChange(true)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  }
+                />
+                <TooltipContent>アルバムを削除</TooltipContent>
+              </Tooltip>
             </div>
             <input
               ref={fileInputRef}
@@ -196,6 +240,28 @@ export function AlbumDetailScreen() {
           )}
         </>
       )}
+
+      <Dialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>アルバムを削除</DialogTitle>
+            <DialogDescription>
+              {itemCount === null
+                ? `「${album?.name ?? ''}」と中の写真・動画をゴミ箱に移動します。`
+                : itemCount === 0
+                  ? `「${album?.name ?? ''}」をゴミ箱に移動します。`
+                  : `「${album?.name ?? ''}」と中の写真・動画${itemCount}件をゴミ箱に移動します。`}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">ゴミ箱からいつでも復元できます。</p>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">キャンセル</Button>} />
+            <Button variant="destructive" disabled={deleting} onClick={handleDeleteAlbum}>
+              {deleting ? '削除中…' : '削除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <UploadTray queue={uploads} />
     </div>

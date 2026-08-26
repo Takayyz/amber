@@ -97,6 +97,8 @@ Amber uses a flat, service-level access control model — there is no per-album 
 - **No "joined after" cutoff**: a newly invited member immediately sees every pre-existing album and photo — there's no history hidden based on when they joined, consistent with the service-wide grant being all-or-nothing.
 - **Soft delete**: Because delete permission is fully flat (anyone can delete anyone's content), deleting an album, photo, or video moves it into a recoverable "trash" state instead of purging immediately. Only the DB reference is flagged; the R2 object is left alone. Restoring follows the same flat permission rule as deleting. Nothing currently removes anything for good — see "Out of Scope for MVP" for what the retention window is waiting on.
 
+  Deleting an album asks first; deleting a single photo does not. Both are undoable, so the difference is reach rather than permanence: an album takes everything inside it out of view at once, and the member doing it may not remember how much that is. The dialog says how many, which is the one place a count query is worth running — the grid deliberately never counts, but that is because it pages on every scroll, and a confirmation happens once. A photo is one item, visible on screen at the moment it is deleted, and photos get tidied several at a time; a prompt on each would be in the way. The trash shows a thumbnail for every photo in it, since "which one was that" is the question a list of album names cannot answer.
+
 ## Authentication
 
 - **Passwordless magic links** via Supabase Auth — no password storage or management.

@@ -3,6 +3,11 @@ import { Play } from 'lucide-react'
 import { presignGet } from '@/lib/api'
 import type { MediaItem } from '@/lib/media-page'
 
+// Only the three columns it draws from, so the trash -- which reads rows of
+// its own shape -- can hand one over without being given the whole listing
+// type it never fetches.
+type Thumbnailed = Pick<MediaItem, 'media_type' | 'storage_key' | 'thumbnail_key'>
+
 /**
  * One square in a grid, signed on demand.
  *
@@ -10,7 +15,7 @@ import type { MediaItem } from '@/lib/media-page'
  * An empty `thumbnail_key` means no frame could be decoded in whatever browser
  * did the uploading (README "Video previews"), so the placeholder stands in.
  */
-export function MediaThumbnail({ item }: { item: MediaItem }) {
+export function MediaThumbnail({ item }: { item: Thumbnailed }) {
   const [url, setUrl] = useState<string | null>(null)
 
   const key = item.media_type === 'photo' ? item.storage_key : item.thumbnail_key

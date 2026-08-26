@@ -114,8 +114,23 @@ export async function fetchMediaBefore(
   return ((data ?? []) as MediaItem[]).reverse()
 }
 
+/**
+ * One item, by the album it is filed under and its own id.
+ *
+ * Unlike the listings above this checks the album's `deleted_at` as well as
+ * the item's. They are reached from an album screen that already refused to
+ * open a trashed album, but this is also what a pasted or bookmarked URL
+ * lands on -- and visibility is the pair of conditions (README design notes).
+ */
 export async function fetchMediaItem(albumId: string, itemId: string): Promise<MediaItem | null> {
-  const { data, error } = await albumItems(albumId).eq('id', itemId).maybeSingle()
+  const { data, error } = await supabase
+    .from('media_items')
+    .select(`${SELECT_WITH_UPLOADER}, album:albums!media_items_album_id_fkey!inner(deleted_at)`)
+    .eq('album_id', albumId)
+    .eq('id', itemId)
+    .is('deleted_at', null)
+    .is('album.deleted_at', null)
+    .maybeSingle()
 
   if (error) throw error
   return (data as MediaItem | null) ?? null

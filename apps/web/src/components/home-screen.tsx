@@ -134,8 +134,12 @@ export function HomeScreen() {
           >
             <Search />
           </Button>
-          <Button variant="outline" size="icon" aria-label="ゴミ箱" render={<Link to="/trash" />}>
+          {/* Labelled, unlike every delete control in the app, which is an
+              icon on its own. The same bin drawn both ways otherwise reads as
+              "remove something" here too. */}
+          <Button variant="outline" render={<Link to="/trash" />}>
             <Trash2 />
+            ゴミ箱
           </Button>
           <InviteDialog />
           <Button variant="outline" onClick={() => supabase.auth.signOut()}>

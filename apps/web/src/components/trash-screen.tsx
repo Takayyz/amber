@@ -4,6 +4,7 @@ import { RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
 import { Button } from '@/components/ui/button'
+import { MediaThumbnail } from '@/components/media-thumbnail'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 type Album = Database['public']['Tables']['albums']['Row']
@@ -140,7 +141,12 @@ export function TrashScreen() {
               {items.map((item) => (
                 <Card key={item.id}>
                   <CardHeader className="flex flex-row items-center justify-between gap-3">
-                    <div className="min-w-0">
+                    {/* The album name alone cannot answer "which one was
+                        that", which is the question the trash gets asked. */}
+                    <div className="w-16 shrink-0">
+                      <MediaThumbnail item={item} />
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <CardTitle className="truncate text-sm">
                         {item.album?.name ?? '(アルバムなし)'}
                       </CardTitle>
