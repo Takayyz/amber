@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { displayNameOrNull, selfLabel } from '@/lib/member-name'
@@ -57,9 +58,16 @@ export function ProfileDialog() {
     setOpen(next)
   }
 
+  // Clearing a name that is already set would rename the member on every photo
+  // they have ever uploaded, since the footer reads display_name live rather
+  // than from a copy taken at upload time. Changing it is fine -- the same
+  // person is called something else -- but emptying it turns every one of
+  // those photos into "unnamed". A member who has never set one is unaffected.
+  const clearsExistingName = displayName !== null && draft.trim() === ''
+
   const handleSave = async (event: FormEvent) => {
     event.preventDefault()
-    if (!userId) return
+    if (!userId || clearsExistingName) return
 
     setSaving(true)
     setError(null)
@@ -110,13 +118,24 @@ export function ProfileDialog() {
               onChange={(event) => setDraft(event.target.value)}
               disabled={saving}
             />
-            <p className="text-sm text-muted-foreground">{session?.user.email}</p>
+            {clearsExistingName && (
+              <p className="text-xs text-destructive">表示名は1文字以上入力してください。</p>
+            )}
           </div>
+
+          {/* The only address this dialog could be showing is the reader's
+              own, so the icon carries it -- the wording is left for screen
+              readers, which get nothing from an icon. */}
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <User className="size-4 shrink-0" aria-hidden />
+            <span className="sr-only">ログイン中のアカウント</span>
+            <span className="truncate">{session?.user.email}</span>
+          </p>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || clearsExistingName}>
               {saving ? '保存中…' : '保存'}
             </Button>
           </DialogFooter>
