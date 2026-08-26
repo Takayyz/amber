@@ -43,9 +43,11 @@ export interface UploadOptions {
 const HTTP_TOO_MANY_REQUESTS = 429
 const HTTP_SERVER_ERROR = 500
 
-// fetch cannot report upload progress -- it has no equivalent of
-// upload.onprogress, and the request-body stream that would replace it is
-// unsupported in Safari, which rules it out for an app used from an iPhone.
+/**
+ * fetch cannot report upload progress -- it has no equivalent of
+ * upload.onprogress, and the request-body stream that would replace it is
+ * unsupported in Safari, which rules it out for an app used from an iPhone.
+ */
 function putWithProgress(url: string, file: File, options: UploadOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()

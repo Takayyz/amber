@@ -44,8 +44,10 @@ function invitationError(code: InvitationErrorCode, status: number): Response {
   return Response.json({ error: code }, { status })
 }
 
-// Shared by sending and re-sending so the same refusal does not come back as
-// 502 from one route and 429 from the other.
+/**
+ * Shared by sending and re-sending so the same refusal does not come back as
+ * 502 from one route and 429 from the other.
+ */
 function inviteFailureStatus(code: 'already_member' | 'rate_limited' | 'invite_failed'): number {
   if (code === 'already_member') return 409
   if (code === 'rate_limited') return 429
@@ -244,9 +246,11 @@ async function handleCreateInvitation(request: Request, env: Env): Promise<Respo
   return invitationError('invite_failed', 502)
 }
 
-// The invite link expires long before the invitation does, and with
-// self-signup off the recipient cannot ask for a replacement themselves --
-// so somebody already inside has to send one.
+/**
+ * The invite link expires long before the invitation does, and with
+ * self-signup off the recipient cannot ask for a replacement themselves --
+ * so somebody already inside has to send one.
+ */
 async function handleResendInvitation(request: Request, env: Env, id: string): Promise<Response> {
   const auth = await requireAuth(request, env)
   if (!auth.ok) return auth.response
@@ -295,9 +299,11 @@ async function handleResendInvitation(request: Request, env: Env, id: string): P
   return new Response(null, { status: 204 })
 }
 
-// Undoes the claim so the invitation reappears in the dialog. Leaving it
-// cancelled would hide an account that still works from the only screen able
-// to revoke it.
+/**
+ * Undoes the claim so the invitation reappears in the dialog. Leaving it
+ * cancelled would hide an account that still works from the only screen able
+ * to revoke it.
+ */
 async function abandonCancel(env: Env, id: string): Promise<Response> {
   await transitionInvitation(env, id, 'cancelled', 'pending')
   return invitationError('invite_failed', 502)

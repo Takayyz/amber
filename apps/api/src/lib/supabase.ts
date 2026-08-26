@@ -48,9 +48,11 @@ async function firstRow(response: Response): Promise<LookupResult> {
   return { ok: true, row: body.length > 0 ? toInvitationRow(body[0]) : null }
 }
 
-// Emails are stored lowercased so PostgREST can match them with eq. rather
-// than ilike, whose `_` wildcard would silently match unrelated addresses
-// (`foo_bar@` vs `fooXbar@`) and reject legitimate invitations.
+/**
+ * Emails are stored lowercased so PostgREST can match them with eq. rather
+ * than ilike, whose `_` wildcard would silently match unrelated addresses
+ * (`foo_bar@` vs `fooXbar@`) and reject legitimate invitations.
+ */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
@@ -99,11 +101,13 @@ export async function inviteUser(env: Env, email: string): Promise<InviteOutcome
   return typeof userId === 'string' ? { ok: true, userId } : { ok: false, code: 'invite_failed' }
 }
 
-// Written after every re-send. last_sent_at drives the cooldown, and
-// invited_user_id has to be refreshed alongside it because the column is
-// `on delete set null`: it empties whenever the account goes away while the
-// row is still pending, and the re-invite then created a fresh account whose
-// id is the only thing that can revoke it later.
+/**
+ * Written after every re-send. last_sent_at drives the cooldown, and
+ * invited_user_id has to be refreshed alongside it because the column is
+ * `on delete set null`: it empties whenever the account goes away while the
+ * row is still pending, and the re-invite then created a fresh account whose
+ * id is the only thing that can revoke it later.
+ */
 export async function recordInvitationSent(
   env: Env,
   id: string,
@@ -137,9 +141,11 @@ export async function deleteAuthUser(env: Env, userId: string): Promise<boolean>
 
 export type AuthUserLookup = { ok: true; userId: string | null } | { ok: false }
 
-// The fallback for a row whose invited_user_id was emptied: the address is
-// the only handle left on the account, and cancelling has to find it or it
-// reports success while leaving the account able to log in.
+/**
+ * The fallback for a row whose invited_user_id was emptied: the address is
+ * the only handle left on the account, and cancelling has to find it or it
+ * reports success while leaving the account able to log in.
+ */
 export async function findAuthUserIdByEmail(env: Env, email: string): Promise<AuthUserLookup> {
   const url = new URL(`${env.SUPABASE_URL}/auth/v1/admin/users`)
   url.searchParams.set('filter', email)
@@ -185,10 +191,12 @@ export async function findInvitation(env: Env, id: string): Promise<LookupResult
   return firstRow(await fetch(url, { headers: serviceHeaders(env) }))
 }
 
-// PostgREST answers 409 for a unique violation and a foreign-key violation
-// alike, so the status alone would report "already invited" for an invite
-// sent by someone whose own members row is missing. The SQLSTATE in the body
-// is what tells them apart.
+/**
+ * PostgREST answers 409 for a unique violation and a foreign-key violation
+ * alike, so the status alone would report "already invited" for an invite
+ * sent by someone whose own members row is missing. The SQLSTATE in the body
+ * is what tells them apart.
+ */
 async function isUniqueViolation(response: Response): Promise<boolean> {
   if (response.status !== 409) return false
   const body: unknown = await response.json().catch(() => null)
@@ -226,9 +234,11 @@ export async function insertInvitation(
   return lookup.ok && lookup.row ? { ok: true, id: lookup.row.id } : { ok: false, conflict: false }
 }
 
-// Moves a row between statuses and reports whether it was still in the
-// expected one. Scoping the update to `from` makes the transition itself the
-// claim: two callers racing cannot both come away believing they won it.
+/**
+ * Moves a row between statuses and reports whether it was still in the
+ * expected one. Scoping the update to `from` makes the transition itself the
+ * claim: two callers racing cannot both come away believing they won it.
+ */
 export async function transitionInvitation(
   env: Env,
   id: string,
