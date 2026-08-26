@@ -96,9 +96,12 @@ export function ProfileDialog() {
         render={
           <button
             type="button"
-            className="truncate rounded-md px-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
+            className="flex min-w-0 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
           >
-            {selfLabel(displayName, session?.user.email)}
+            {/* Without it the name reads as a heading rather than as who is
+                signed in -- the same icon the dialog uses for the address. */}
+            <User className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">{selfLabel(displayName, session?.user.email)}</span>
           </button>
         }
       />
