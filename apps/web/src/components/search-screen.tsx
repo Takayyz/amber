@@ -131,8 +131,8 @@ export function SearchScreen() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-4">
-      <Button variant="outline" className="self-start" render={<Link to="/" />}>
-        ← アルバム一覧に戻る
+      <Button variant="ghost" className="self-start" render={<Link to="/" />}>
+        ← 戻る
       </Button>
 
       <div>
