@@ -9,7 +9,13 @@ import { InviteDialog } from '@/components/invite-dialog'
 import { ProfileDialog } from '@/components/profile-dialog'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface AccountAction {
   icon: ComponentType<{ className?: string }>
@@ -116,8 +122,8 @@ export function AppHeader({ children }: AppHeaderProps) {
               <ChevronDown className="size-3.5 text-muted-foreground" />
             </Button>
           ) : (
-            <Menu>
-              <MenuTrigger
+            <DropdownMenu>
+              <DropdownMenuTrigger
                 render={
                   <Button variant="outline" className="min-w-0 gap-1">
                     <User className="text-muted-foreground" />
@@ -131,24 +137,24 @@ export function AppHeader({ children }: AppHeaderProps) {
               {/* Every row carries an icon, including the ones that would read
                   fine without: a column of them is what the eye follows, and a
                   gap in it puts one label out of line with the rest. */}
-              <MenuContent>
+              <DropdownMenuContent align="end">
                 {groups.map((group, index) => (
                   <div key={group[0].label}>
-                    {index > 0 && <MenuSeparator />}
+                    {index > 0 && <DropdownMenuSeparator />}
                     {group.map(({ icon: Icon, label, run, destructive }) => (
-                      <MenuItem
+                      <DropdownMenuItem
                         key={label}
                         variant={destructive ? 'destructive' : 'default'}
                         onClick={run}
                       >
                         <Icon />
                         {label}
-                      </MenuItem>
+                      </DropdownMenuItem>
                     ))}
                   </div>
                 ))}
-              </MenuContent>
-            </Menu>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </header>
