@@ -2,6 +2,7 @@ import { classifyMedia } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
 import { presignPut } from '@/lib/api'
 import { extractExif } from '@/lib/exif'
+import { extractVideoThumbnail } from '@/lib/video-thumbnail'
 
 // What a PUT leaves behind. Held onto so a retry after the object is already
 // in R2 skips straight to the ledger row: re-uploading would abandon the first
@@ -9,6 +10,10 @@ import { extractExif } from '@/lib/exif'
 export interface StoredObject {
   storageKey: string
   mediaType: 'photo' | 'video'
+  // A second object beside the video, when this browser could decode a frame.
+  // Carried for the same reason as storageKey: a retry that already has one
+  // must not upload another.
+  thumbnailKey?: string
 }
 
 // Every message here reaches the tray as-is, so they are written for the member
@@ -83,6 +88,43 @@ function putWithProgress(url: string, file: File, options: UploadOptions): Promi
   })
 }
 
+/**
+ * Draws the video's opening frame and puts it in R2 beside the video.
+ *
+ * Best-effort throughout: every failure answers with undefined, and the item
+ * is recorded without a thumbnail rather than the upload failing over a
+ * preview. The grid falls back to the placeholder in that case.
+ */
+async function uploadThumbnail(
+  file: File,
+  albumId: string,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  const frame = await extractVideoThumbnail(file)
+  if (!frame || signal.aborted) return undefined
+
+  try {
+    const presigned = await presignPut({
+      albumId,
+      contentType: 'image/jpeg',
+      fileSize: frame.size,
+    })
+
+    // Plain fetch rather than the XHR the video itself needs: a thumbnail is
+    // tens of kilobytes, so there is no progress worth reporting.
+    const response = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      body: frame,
+      headers: { 'Content-Type': 'image/jpeg' },
+      signal,
+    })
+
+    return response.ok ? presigned.storageKey : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function recordMediaItem(
   file: File,
   albumId: string,
@@ -95,6 +137,7 @@ async function recordMediaItem(
     album_id: albumId,
     media_type: stored.mediaType,
     storage_key: stored.storageKey,
+    thumbnail_key: stored.thumbnailKey ?? null,
     captured_at: exif.capturedAt?.toISOString() ?? null,
     gps_lat: exif.gpsLat,
     gps_lng: exif.gpsLng,
@@ -115,7 +158,13 @@ export async function uploadMediaItem(
   options: UploadOptions,
 ): Promise<void> {
   if (options.stored) {
-    await recordMediaItem(file, albumId, userId, options.stored)
+    const stored = options.stored
+    // The video is already in R2; only the frame is worth another try, and
+    // only if the earlier attempt never got one.
+    if (stored.mediaType === 'video' && !stored.thumbnailKey) {
+      stored.thumbnailKey = await uploadThumbnail(file, albumId, options.signal)
+    }
+    await recordMediaItem(file, albumId, userId, stored)
     return
   }
 
@@ -150,6 +199,12 @@ export async function uploadMediaItem(
   // appeared in the album anyway.
   if (options.signal.aborted) {
     throw new UploadError('中止しました', { retryable: false, stored })
+  }
+
+  // After the video is safely stored, so a browser that cannot decode it
+  // costs the upload nothing. The tray sits at 100% while this runs.
+  if (stored.mediaType === 'video') {
+    stored.thumbnailKey = await uploadThumbnail(file, albumId, options.signal)
   }
 
   await recordMediaItem(file, albumId, userId, stored)

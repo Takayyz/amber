@@ -1,0 +1,12 @@
+-- Video thumbnails (README "Video previews"): the first frame, drawn in the
+-- browser at upload time and stored as a second R2 object beside the video.
+--
+-- Nullable because generating it is best-effort. A browser that cannot decode
+-- the codec -- an iPhone's HEVC .MOV outside Safari, most commonly -- still
+-- uploads the video itself, and the grid falls back to the placeholder it
+-- showed before. An empty column therefore means "no frame was obtained",
+-- never "this item has no video".
+--
+-- The column sits on media_items rather than a table of its own: it is one
+-- nullable string per row, and photos simply leave it empty.
+alter table public.media_items add column thumbnail_key text;

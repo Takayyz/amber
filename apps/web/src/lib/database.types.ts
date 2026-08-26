@@ -158,6 +158,7 @@ export type Database = {
           media_type: string
           sort_key: string | null
           storage_key: string
+          thumbnail_key: string | null
           uploaded_at: string
           uploaded_by: string | null
         }
@@ -171,6 +172,7 @@ export type Database = {
           media_type: string
           sort_key?: string | null
           storage_key: string
+          thumbnail_key?: string | null
           uploaded_at?: string
           uploaded_by?: string | null
         }
@@ -184,6 +186,7 @@ export type Database = {
           media_type?: string
           sort_key?: string | null
           storage_key?: string
+          thumbnail_key?: string | null
           uploaded_at?: string
           uploaded_by?: string | null
         }
@@ -261,6 +264,7 @@ export type Database = {
           media_type: string
           sort_key: string | null
           storage_key: string
+          thumbnail_key: string | null
           uploaded_at: string
           uploaded_by: string | null
         }[]
