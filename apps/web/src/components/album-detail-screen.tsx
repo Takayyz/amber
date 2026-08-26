@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useUploadQueue } from '@/lib/use-upload-queue'
 import { cursorOf, fetchMediaPage, PAGE_SIZE, type MediaItem } from '@/lib/media-page'
 import type { Database } from '@/lib/database.types'
+import { AppHeader } from '@/components/app-header'
 import { Button } from '@/components/ui/button'
 import { MediaThumbnail } from '@/components/media-thumbnail'
 import { UploadTray } from '@/components/upload-tray'
@@ -164,9 +165,13 @@ export function AlbumDetailScreen() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-4">
-      <Button variant="ghost" className="self-start" render={<Link to="/" />}>
-        ← 戻る
-      </Button>
+      {/* The way back rides in the header's left slot, so the album gets one
+          bar rather than a back button above a row of controls. */}
+      <AppHeader>
+        <Button variant="ghost" render={<Link to="/" />}>
+          ← 戻る
+        </Button>
+      </AppHeader>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">読み込み中…</p>
