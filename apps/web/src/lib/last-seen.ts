@@ -7,7 +7,11 @@ import { supabase } from '@/lib/supabase'
 //
 // The promise itself is cached, not just its result, so two callers arriving
 // in the same tick share one round trip instead of both writing the time back.
-let visit: Promise<string | null> | undefined
+//
+// Kept against the member it was taken for. Signing out does not reload the
+// page, so without the id a second member signing in would inherit the first
+// one's reference point and never have their own visit recorded.
+let visit: { userId: string; reference: Promise<string | null> } | undefined
 
 async function beginVisit(userId: string): Promise<string | null> {
   const { data, error } = await supabase
@@ -43,8 +47,10 @@ async function beginVisit(userId: string): Promise<string | null> {
  * nothing (README "New since last visit").
  */
 export function visitReference(userId: string): Promise<string | null> {
-  visit ??= beginVisit(userId)
-  return visit
+  if (visit?.userId !== userId) {
+    visit = { userId, reference: beginVisit(userId) }
+  }
+  return visit.reference
 }
 
 /** Whether `timestamp` falls after the reference point for this visit. */
