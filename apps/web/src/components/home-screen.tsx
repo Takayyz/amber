@@ -1,13 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ChevronDown, LogOut, Pencil, Search, Trash2, User, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { presignGet } from '@/lib/api'
 import { isSince, visitReference } from '@/lib/last-seen'
 import type { Database } from '@/lib/database.types'
+import { displayNameOrNull, selfLabel } from '@/lib/member-name'
 import { InviteDialog } from '@/components/invite-dialog'
 import { ProfileDialog } from '@/components/profile-dialog'
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,6 +62,7 @@ function AlbumCover({ cover }: { cover: Album['cover'] }) {
 
 export function HomeScreen() {
   const { session } = useAuth()
+  const navigate = useNavigate()
   const [albums, setAlbums] = useState<Album[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -69,6 +72,11 @@ export function HomeScreen() {
   // Null until the reference point arrives, and null again for a member whose
   // first visit this is -- both mean no badges.
   const [seenBefore, setSeenBefore] = useState<string | null>(null)
+  // Held here rather than inside the profile dialog: the menu trigger shows
+  // the name, and the dialog is only one of the things that menu opens.
+  const [displayName, setDisplayName] = useState<string | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   const fetchAlbums = async () => {
     const { data } = await supabase
@@ -86,6 +94,25 @@ export function HomeScreen() {
   useEffect(() => {
     fetchAlbums()
   }, [])
+
+  useEffect(() => {
+    const userId = session?.user.id
+    if (!userId) return
+    let cancelled = false
+
+    supabase
+      .from('members')
+      .select('display_name')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setDisplayName(displayNameOrNull(data?.display_name))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
 
   useEffect(() => {
     if (!session) return
@@ -123,30 +150,63 @@ export function HomeScreen() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 p-4">
-      <header className="flex items-center justify-between gap-2">
-        <ProfileDialog />
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="タグで探す"
-            render={<Link to="/search" />}
-          >
-            <Search />
-          </Button>
-          {/* Labelled, unlike every delete control in the app, which is an
-              icon on its own. The same bin drawn both ways otherwise reads as
-              "remove something" here too. */}
-          <Button variant="outline" render={<Link to="/trash" />}>
-            <Trash2 />
-            ゴミ箱
-          </Button>
-          <InviteDialog />
-          <Button variant="outline" onClick={() => supabase.auth.signOut()}>
-            ログアウト
-          </Button>
-        </div>
+      {/* Searching is the one thing here that is about the photos, so it stays
+          out on its own. Everything else belongs to the account or to the
+          service around it, and lives behind the name. */}
+      <header className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="icon" aria-label="タグで探す" render={<Link to="/search" />}>
+          <Search />
+        </Button>
+
+        <Menu>
+          <MenuTrigger
+            render={
+              <Button variant="outline" className="min-w-0 gap-1">
+                <User className="text-muted-foreground" />
+                <span className="truncate">{selfLabel(displayName, session?.user.email)}</span>
+                {/* Small and dim: it says the name opens something, and is not
+                    itself worth looking at. */}
+                <ChevronDown className="size-3.5 text-muted-foreground" />
+              </Button>
+            }
+          />
+          {/* Every row carries an icon, including the ones that would read
+              fine without: a column of them is what the eye follows, and a
+              gap in it puts one label out of line with the rest. */}
+          <MenuContent>
+            <MenuItem onClick={() => setProfileOpen(true)}>
+              <Pencil />
+              表示名を編集
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              // The menu closes on its own, and navigating from inside the
+              // click keeps that from racing with the route change.
+              onClick={() => navigate('/trash')}
+            >
+              <Trash2 />
+              ゴミ箱
+            </MenuItem>
+            <MenuItem onClick={() => setInviteOpen(true)}>
+              <UserPlus />
+              メンバーを招待
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem variant="destructive" onClick={() => void supabase.auth.signOut()}>
+              <LogOut />
+              ログアウト
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       </header>
+
+      <ProfileDialog
+        open={profileOpen}
+        onOpenChange={setProfileOpen}
+        displayName={displayName}
+        onSaved={setDisplayName}
+      />
+      <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
 
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-medium">アルバム</h1>

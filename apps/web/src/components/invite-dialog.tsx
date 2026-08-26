@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Send, UserPlus, X } from 'lucide-react'
+import { Send, X } from 'lucide-react'
 import type { InvitationErrorCode } from '@amber/shared'
 import { supabase } from '@/lib/supabase'
 import { InvitationError, cancelInvitation, resendInvitation, sendInvitation } from '@/lib/api'
@@ -13,7 +13,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 
 type Invitation = Database['public']['Tables']['invitations']['Row']
@@ -36,8 +35,16 @@ function messageFor(error: unknown): string {
     : ERROR_MESSAGES.invite_failed
 }
 
-export function InviteDialog() {
-  const [open, setOpen] = useState(false)
+interface InviteDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+/**
+ * Opened from the account menu, which has to close before this appears, so
+ * the open state is held by the header rather than by a trigger in here.
+ */
+export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps) {
   const [pending, setPending] = useState<Invitation[]>([])
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
@@ -139,14 +146,6 @@ export function InviteDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline">
-            <UserPlus />
-            招待
-          </Button>
-        }
-      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>メンバーを招待</DialogTitle>

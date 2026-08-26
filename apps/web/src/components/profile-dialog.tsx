@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
-import { displayNameOrNull, selfLabel } from '@/lib/member-name'
+import { displayNameOrNull } from '@/lib/member-name'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,40 +13,31 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 
 // Long enough for a name, short enough that it cannot push the album header
 // around. The column itself is unbounded text, so this is the only limit.
 const DISPLAY_NAME_MAX_LENGTH = 40
 
-export function ProfileDialog() {
+interface ProfileDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** What is saved right now, which the header is already showing. */
+  displayName: string | null
+  onSaved: (displayName: string | null) => void
+}
+
+/**
+ * Opened from the account menu rather than owning its own trigger: the header
+ * shows the name, and the menu it belongs to has to close before this appears.
+ */
+export function ProfileDialog({ open, onOpenChange, displayName, onSaved }: ProfileDialogProps) {
   const { session } = useAuth()
   const userId = session?.user.id
 
-  const [open, setOpen] = useState(false)
-  const [displayName, setDisplayName] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!userId) return
-    let cancelled = false
-
-    supabase
-      .from('members')
-      .select('display_name')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setDisplayName(data?.display_name ?? null)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [userId])
 
   // The field starts from what is saved each time it opens, so a cancelled
   // edit does not linger into the next one.
@@ -55,7 +46,7 @@ export function ProfileDialog() {
       setDraft(displayName ?? '')
       setError(null)
     }
-    setOpen(next)
+    onOpenChange(next)
   }
 
   // Clearing a name that is already set would rename the member on every photo
@@ -86,25 +77,12 @@ export function ProfileDialog() {
       return
     }
 
-    setDisplayName(normalized)
-    setOpen(false)
+    onSaved(normalized)
+    onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <button
-            type="button"
-            className="flex min-w-0 items-center gap-1.5 rounded-md px-1 text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {/* Without it the name reads as a heading rather than as who is
-                signed in -- the same icon the dialog uses for the address. */}
-            <User className="size-4 shrink-0" aria-hidden />
-            <span className="truncate">{selfLabel(displayName, session?.user.email)}</span>
-          </button>
-        }
-      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>表示名編集</DialogTitle>
