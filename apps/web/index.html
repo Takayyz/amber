@@ -11,6 +11,22 @@
     <meta name="theme-color" content="#14110E" />
     <meta name="description" content="写真を、大切な人たちとだけ。" />
     <title>Amber</title>
+    <!-- Runs before the first paint, and before the bundle is even fetched, so
+         a member on the dark theme never sees a white frame first. The app
+         applies the same class again once it mounts; this is only about
+         getting there earlier. -->
+    <script>
+      try {
+        var stored = localStorage.getItem('amber-theme')
+        var dark =
+          stored === 'dark' ||
+          ((stored === 'system' || stored === null) &&
+            matchMedia('(prefers-color-scheme: dark)').matches)
+        if (dark) document.documentElement.classList.add('dark')
+      } catch (e) {
+        // Storage blocked: start light rather than not starting.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

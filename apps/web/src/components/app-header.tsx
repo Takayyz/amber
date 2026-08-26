@@ -1,8 +1,22 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, LogOut, Pencil, Search, Trash2, User, UserPlus } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  LogOut,
+  MonitorSmartphone,
+  Moon,
+  Pencil,
+  Search,
+  Sun,
+  Trash2,
+  User,
+  UserPlus,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useTheme } from '@/lib/theme-context'
+import type { Theme } from '@/lib/theme'
 import { displayNameOrNull, selfLabel } from '@/lib/member-name'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { InviteDialog } from '@/components/invite-dialog'
@@ -22,7 +36,15 @@ interface AccountAction {
   label: string
   run: () => void
   destructive?: boolean
+  /** Drawn with a tick when true, for the rows that pick between options. */
+  selected?: boolean
 }
+
+const THEMES: { value: Theme; icon: ComponentType<{ className?: string }>; label: string }[] = [
+  { value: 'light', icon: Sun, label: 'ライト' },
+  { value: 'dark', icon: Moon, label: 'ダーク' },
+  { value: 'system', icon: MonitorSmartphone, label: '端末に合わせる' },
+]
 
 interface AppHeaderProps {
   /**
@@ -45,6 +67,7 @@ export function AppHeader({ children }: AppHeaderProps) {
   const { session } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { theme, setTheme } = useTheme()
 
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -76,6 +99,12 @@ export function AppHeader({ children }: AppHeaderProps) {
   // and both the menu and the drawer draw them from the same shape.
   const groups: AccountAction[][] = [
     [{ icon: Pencil, label: '表示名を編集', run: () => setProfileOpen(true) }],
+    THEMES.map(({ value, icon, label }) => ({
+      icon,
+      label,
+      run: () => setTheme(value),
+      selected: theme === value,
+    })),
     [
       { icon: Trash2, label: 'ゴミ箱', run: () => navigate('/trash') },
       { icon: UserPlus, label: 'メンバーを招待', run: () => setInviteOpen(true) },
@@ -141,7 +170,7 @@ export function AppHeader({ children }: AppHeaderProps) {
                 {groups.map((group, index) => (
                   <div key={group[0].label}>
                     {index > 0 && <DropdownMenuSeparator />}
-                    {group.map(({ icon: Icon, label, run, destructive }) => (
+                    {group.map(({ icon: Icon, label, run, destructive, selected }) => (
                       <DropdownMenuItem
                         key={label}
                         variant={destructive ? 'destructive' : 'default'}
@@ -149,6 +178,9 @@ export function AppHeader({ children }: AppHeaderProps) {
                       >
                         <Icon />
                         {label}
+                        {/* Pushed to the far edge so the ticks line up in
+                            their own column, whatever the labels measure. */}
+                        {selected && <Check className="ml-auto" />}
                       </DropdownMenuItem>
                     ))}
                   </div>
@@ -173,7 +205,7 @@ export function AppHeader({ children }: AppHeaderProps) {
             {groups.map((group, index) => (
               <div key={group[0].label} className="flex flex-col">
                 {index > 0 && <div aria-hidden className="my-1 h-px bg-border" />}
-                {group.map(({ icon: Icon, label, run, destructive }) => (
+                {group.map(({ icon: Icon, label, run, destructive, selected }) => (
                   <button
                     key={label}
                     type="button"
@@ -191,6 +223,7 @@ export function AppHeader({ children }: AppHeaderProps) {
                       className={destructive ? 'size-4 shrink-0' : 'size-4 shrink-0 text-muted-foreground'}
                     />
                     {label}
+                    {selected && <Check className="ml-auto size-4 shrink-0" />}
                   </button>
                 ))}
               </div>

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/auth-context'
+import { ThemeProvider } from '@/lib/theme-context'
 import { LoginScreen } from '@/components/login-screen'
 import { HomeScreen } from '@/components/home-screen'
 import { AlbumDetailScreen } from '@/components/album-detail-screen'
@@ -31,11 +32,15 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </AuthProvider>
+    // Outside the auth boundary: the login screen is themed too, and the
+    // choice belongs to the device rather than to whoever is signed in.
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
