@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 type Status = 'idle' | 'sending' | 'sent' | 'error'
 
@@ -27,8 +27,11 @@ export function LoginScreen() {
     <div className="flex min-h-svh items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Amber</CardTitle>
-          <CardDescription>ログイン用のリンクをメールで送ります</CardDescription>
+          {/* The one screen reached before signing in, so it is where the mark
+              has to say which service this is. Served from public/, and it
+              carries both palettes itself (README "Brand"). */}
+          <img src="/favicon.svg" alt="" width={48} height={48} className="mx-auto" />
+          <CardTitle className="text-center">Amber</CardTitle>
         </CardHeader>
         <CardContent>
           {status === 'sent' ? (
