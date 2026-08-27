@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
+import { useState, type ComponentType, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Check,
@@ -16,13 +16,15 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { useTheme } from '@/lib/theme-context'
+import { useMemberName } from '@/lib/member-name-context'
 import type { Theme } from '@/lib/theme'
-import { displayNameOrNull, selfLabel } from '@/lib/member-name'
+import { selfLabel } from '@/lib/member-name'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { InviteDialog } from '@/components/invite-dialog'
 import { ProfileDialog } from '@/components/profile-dialog'
 import { TagSearchField } from '@/components/tag-search-field'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import {
   DropdownMenu,
@@ -57,12 +59,30 @@ interface AppHeaderProps {
 }
 
 /**
+ * The name slot keeps its width whatever is in it.
+ *
+ * Sizing to the text would give the header a different layout per member, and
+ * a different one again for the moment before the name is known -- and the
+ * field beside it is supposed to hold still to the pixel, which is the whole
+ * of what it buys. Wide enough for a given name; anything longer is in the
+ * profile dialog, one press away.
+ */
+function MemberLabel({ name, known }: { name: string; known: boolean }) {
+  return (
+    <span className="w-20 truncate text-left">
+      {known ? name : <Skeleton className="h-3.5 w-full" />}
+    </span>
+  )
+}
+
+/**
  * The controls that belong to no particular screen: searching, and everything
  * behind the member's own name.
  *
- * Each screen mounts its own, so the name is read once per screen rather than
- * held somewhere global -- it changes rarely, and the alternative is a cache
- * that has to be told when the profile dialog saves.
+ * Each screen mounts its own, so anything it holds is gone by the next one.
+ * The name is therefore read at the provider rather than here: starting over
+ * per screen meant rendering the email address until the row came back, and
+ * that is both the wrong name and a wider one.
  */
 export function AppHeader({ children }: AppHeaderProps) {
   const { session } = useAuth()
@@ -73,29 +93,10 @@ export function AppHeader({ children }: AppHeaderProps) {
   const searching = useLocation().pathname === '/search'
   const { theme, setTheme } = useTheme()
 
-  const [displayName, setDisplayName] = useState<string | null>(null)
+  const { displayName, known, setDisplayName } = useMemberName()
   const [profileOpen, setProfileOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-
-  useEffect(() => {
-    const userId = session?.user.id
-    if (!userId) return
-    let cancelled = false
-
-    supabase
-      .from('members')
-      .select('display_name')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setDisplayName(displayNameOrNull(data?.display_name))
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [session])
 
   const name = selfLabel(displayName, session?.user.email)
 
@@ -164,7 +165,7 @@ export function AppHeader({ children }: AppHeaderProps) {
               onClick={() => setDrawerOpen(true)}
             >
               <User className="text-muted-foreground" />
-              <span className="truncate">{name}</span>
+              <MemberLabel name={name} known={known} />
               <ChevronDown className="size-3.5 text-muted-foreground" />
             </Button>
           ) : (
@@ -173,7 +174,7 @@ export function AppHeader({ children }: AppHeaderProps) {
                 render={
                   <Button variant="outline" className="min-w-0 gap-1">
                     <User className="text-muted-foreground" />
-                    <span className="truncate">{name}</span>
+                    <MemberLabel name={name} known={known} />
                     {/* Small and dim: it says the name opens something, and is
                         not itself worth looking at. */}
                     <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -215,7 +216,7 @@ export function AppHeader({ children }: AppHeaderProps) {
                 opened read as the same thing. */}
             <DrawerTitle className="flex items-center justify-center gap-2">
               <User className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">{name}</span>
+              <MemberLabel name={name} known={known} />
             </DrawerTitle>
           </DrawerHeader>
           <div className="flex flex-col p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">

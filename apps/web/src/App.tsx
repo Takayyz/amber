@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/lib/auth-context'
 import { ThemeProvider } from '@/lib/theme-context'
+import { MemberNameProvider } from '@/lib/member-name-context'
 import { LoginScreen } from '@/components/login-screen'
 import { HomeScreen } from '@/components/home-screen'
 import { AlbumDetailScreen } from '@/components/album-detail-screen'
@@ -36,9 +37,13 @@ function App() {
     // choice belongs to the device rather than to whoever is signed in.
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
+        {/* Inside the auth boundary, unlike the theme: the name belongs to
+            whoever is signed in, and there is nobody to name before that. */}
+        <MemberNameProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </MemberNameProvider>
       </AuthProvider>
     </ThemeProvider>
   )
