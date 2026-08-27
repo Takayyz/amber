@@ -136,6 +136,13 @@ export function SearchScreen() {
     setSearchParams(params, { replace: true })
   }
 
+  // `loading` says a search is in flight; what that should look like depends on
+  // whether there is anything worth keeping on screen. Only the first search
+  // has nothing, so only the first one gets a skeleton -- the same reasoning as
+  // the viewer, which holds the photo it has while fetching its neighbours.
+  const showSkeleton = loading && items.length === 0
+  const stale = loading && items.length > 0
+
   const query = searchParams.get(QUERY_PARAM)?.trim() ?? ''
 
   // Selected tags stay on screen whatever is typed. Filtering them out of
@@ -222,13 +229,24 @@ export function SearchScreen() {
 
       {selected.length === 0 ? (
         <p className="text-sm text-muted-foreground">タグを選ぶと写真が絞り込まれます。</p>
-      ) : loading ? (
+      ) : showSkeleton ? (
         <MediaGridSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">該当する写真がありません。</p>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-2">
+          {/* Held rather than torn down while the next search runs. Narrowing
+              by a second tag used to replace the whole grid with a skeleton
+              and build it again, which flickered once per press. Dimmed so the
+              wait is visible, and left unclickable meanwhile: these are the
+              results of the previous search, and opening one would hand the
+              viewer a photo the arrows are no longer stepping through. */}
+          <div
+            aria-busy={stale}
+            className={`grid grid-cols-3 gap-2 transition-opacity ${
+              stale ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
             {items.map((item) => (
               <Link
                 key={item.id}
