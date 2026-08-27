@@ -174,7 +174,7 @@ export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps)
               <Button
                 type="submit"
                 disabled={sending}
-                className="bg-invite text-invite-foreground hover:bg-invite/80"
+                className="bg-invite/10 text-[color-mix(in_oklab,var(--invite),var(--foreground)_30%)] hover:bg-invite/20 dark:bg-invite/20 dark:hover:bg-invite/30"
               >
                 {sending && <Spinner />}
                 {sending ? '送信中…' : '送信'}

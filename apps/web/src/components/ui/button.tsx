@@ -8,7 +8,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // A tint rather than upstream's solid fill, mirroring `destructive`
+        // below: the two sit side by side on the album screen, and a 10% chip
+        // next to a 100% block read as two different design languages. The
+        // label darkens on light and lightens on dark by mixing toward
+        // `--foreground`, since the tint is too pale to carry `--primary` at
+        // its own lightness (3.70:1 on the light page).
+        //
+        // The mix is `in oklab`, not `in oklch`: oklch interpolates the hue
+        // angle, so mixing a colour with the warm near-neutral `--foreground`
+        // drags it round the wheel. It costs nothing here, where both are at
+        // hue 69, but the same expression turned the turquoise invite button
+        // olive, and the two should stay written the same way.
+        default:
+          "bg-primary/10 text-[color-mix(in_oklab,var(--primary),var(--foreground)_30%)] hover:bg-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
