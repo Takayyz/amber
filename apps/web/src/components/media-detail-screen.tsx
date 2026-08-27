@@ -65,16 +65,16 @@ function isFromTextInput(target: EventTarget | null): boolean {
 }
 
 /**
- * What the cover control can do for the item on screen. Two of these leave the
- * button disabled for unrelated reasons, so they have to be told apart: a
- * greyed-out control that cannot say whether it is spent or forbidden is worse
- * than no control at all.
+ * What the cover control does for the item on screen. It is a toggle rather
+ * than a one-way switch: only a video leaves it disabled, and the label says
+ * which way the next press goes, which is also how the current state is read
+ * out to anyone not looking at the highlight.
  */
 type CoverState = 'available' | 'set' | 'video'
 
 const COVER_LABEL: Record<CoverState, string> = {
   available: 'アルバムのカバーにする',
-  set: 'アルバムのカバーに設定済み',
+  set: 'アルバムのカバーを解除',
   video: '動画はカバーにできません',
 }
 
@@ -276,18 +276,24 @@ export function MediaDetailScreen() {
     }
   }
 
-  const handleSetCover = async () => {
+  const handleToggleCover = async () => {
     if (!current || !albumId) return
     setBusy(true)
     setActionError(null)
 
+    // Clearing back to null, not only handing the cover to some other photo.
+    // "No cover" is the state an album starts in and falls back to the
+    // placeholder for, so it has to be reachable again -- otherwise the first
+    // photo anyone picks is permanent in all but name.
+    const next = coverId === current.id ? null : current.id
+
     const { error } = await supabase
       .from('albums')
-      .update({ cover_media_item_id: current.id })
+      .update({ cover_media_item_id: next })
       .eq('id', albumId)
 
-    if (error) setActionError('カバーに設定できませんでした。')
-    else setCoverId(current.id)
+    if (error) setActionError(next ? 'カバーに設定できませんでした。' : 'カバーを解除できませんでした。')
+    else setCoverId(next)
     setBusy(false)
   }
 
@@ -431,13 +437,13 @@ export function MediaDetailScreen() {
                     <button
                       type="button"
                       aria-label={COVER_LABEL[coverStateOf(current, coverId)]}
-                      disabled={busy || coverStateOf(current, coverId) !== 'available'}
-                      onClick={handleSetCover}
+                      disabled={busy || coverStateOf(current, coverId) === 'video'}
+                      onClick={handleToggleCover}
                       // Already the cover: held lit rather than dimmed, so it
                       // does not read the same as a video that can never be one.
                       className={
                         coverStateOf(current, coverId) === 'set'
-                          ? 'rounded-md bg-white/15 p-2 text-neutral-100'
+                          ? 'rounded-md bg-white/15 p-2 text-neutral-100 hover:bg-white/25 disabled:opacity-50'
                           : 'rounded-md p-2 hover:bg-white/10 disabled:opacity-50'
                       }
                     >
