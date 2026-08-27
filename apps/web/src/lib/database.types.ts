@@ -246,6 +246,8 @@ export type Database = {
     }
     Functions: {
       is_member: { Args: never; Returns: boolean }
+      prune_tag_if_unused: { Args: { target_tag_id: string }; Returns: boolean }
+      prune_unused_tags: { Args: never; Returns: number }
       search_media_items: {
         Args: {
           backwards?: boolean
