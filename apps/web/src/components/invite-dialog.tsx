@@ -167,7 +167,15 @@ export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps)
                 onChange={(event) => setEmail(event.target.value)}
                 disabled={sending}
               />
-              <Button type="submit" disabled={sending}>
+              {/* The mark's second colour, spent where the mark means it: the
+                  gaps in the enclosure are where someone new is let in.
+                  Merged over the default variant rather than added to
+                  `ui/button.tsx`, which `shadcn add` overwrites. */}
+              <Button
+                type="submit"
+                disabled={sending}
+                className="bg-invite text-invite-foreground hover:bg-invite/80"
+              >
                 {sending && <Spinner />}
                 {sending ? '送信中…' : '送信'}
               </Button>
@@ -193,7 +201,12 @@ export function InviteDialog({ open, onOpenChange: setOpen }: InviteDialogProps)
             <ul className="flex flex-col gap-1">
               {pending.map((invitation) => (
                 <li key={invitation.id} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{invitation.email}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    {/* Same colour as the button that sent it, so a row here
+                        reads as the invitation that action put in flight. */}
+                    <span className="size-1.5 shrink-0 rounded-full bg-invite" aria-hidden />
+                    <span className="truncate text-sm">{invitation.email}</span>
+                  </span>
                   <div className="flex shrink-0 items-center gap-1">
                     {resentId === invitation.id && (
                       <span className="text-xs text-muted-foreground">送信しました</span>
