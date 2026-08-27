@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, Star, Trash2, X } from 'lucide-react'
+import { BookImage, ChevronLeft, ChevronRight, Download, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { presignGet } from '@/lib/api'
 import { uploaderLabel } from '@/lib/member-name'
@@ -62,6 +62,25 @@ function isFromVideo(target: EventTarget | null): boolean {
 // viewer someone is still typing into.
 function isFromTextInput(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('input, textarea') !== null
+}
+
+/**
+ * What the cover control can do for the item on screen. Two of these leave the
+ * button disabled for unrelated reasons, so they have to be told apart: a
+ * greyed-out control that cannot say whether it is spent or forbidden is worse
+ * than no control at all.
+ */
+type CoverState = 'available' | 'set' | 'video'
+
+const COVER_LABEL: Record<CoverState, string> = {
+  available: 'アルバムのカバーにする',
+  set: 'アルバムのカバーに設定済み',
+  video: '動画はカバーにできません',
+}
+
+function coverStateOf(item: MediaItem, coverId: string | null): CoverState {
+  if (item.media_type === 'video') return 'video'
+  return item.id === coverId ? 'set' : 'available'
 }
 
 interface CachedUrl {
@@ -385,24 +404,49 @@ export function MediaDetailScreen() {
         {current && (
           <>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                aria-label="ダウンロード"
-                disabled={busy}
-                onClick={handleDownload}
-                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
-              >
-                <Download className="size-5" />
-              </button>
-              <button
-                type="button"
-                aria-label={coverId === current.id ? 'アルバムのカバーに設定済み' : 'アルバムのカバーにする'}
-                disabled={busy || coverId === current.id || current.media_type === 'video'}
-                onClick={handleSetCover}
-                className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
-              >
-                <Star className={coverId === current.id ? 'size-5 fill-current' : 'size-5'} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label="ダウンロード"
+                      disabled={busy}
+                      onClick={handleDownload}
+                      className="rounded-md p-2 hover:bg-white/10 disabled:opacity-50"
+                    >
+                      <Download className="size-5" />
+                    </button>
+                  }
+                />
+                <TooltipContent>ダウンロード</TooltipContent>
+              </Tooltip>
+              {/* A star means "favourite" everywhere else, and this writes the
+                  album's cover instead -- the person who built it read it as a
+                  favourite. A book carrying a picture is the thing being set,
+                  and says so without waiting to be hovered, which is the half
+                  of the answer a phone never gets. */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={COVER_LABEL[coverStateOf(current, coverId)]}
+                      disabled={busy || coverStateOf(current, coverId) !== 'available'}
+                      onClick={handleSetCover}
+                      // Already the cover: held lit rather than dimmed, so it
+                      // does not read the same as a video that can never be one.
+                      className={
+                        coverStateOf(current, coverId) === 'set'
+                          ? 'rounded-md bg-white/15 p-2 text-neutral-100'
+                          : 'rounded-md p-2 hover:bg-white/10 disabled:opacity-50'
+                      }
+                    >
+                      <BookImage className="size-5" />
+                    </button>
+                  }
+                />
+                <TooltipContent>{COVER_LABEL[coverStateOf(current, coverId)]}</TooltipContent>
+              </Tooltip>
               {/* Names what it removes, so it cannot be read as the album
                   delete that sits one screen back behind the same icon. */}
               <Tooltip>
