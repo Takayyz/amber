@@ -31,6 +31,29 @@ export function AlbumCardsSkeleton() {
   )
 }
 
+// A handful of varied widths, so the row reads as words rather than a bar.
+const TAG_WIDTHS = ['w-14', 'w-20', 'w-16', 'w-24', 'w-12']
+
+/**
+ * Stands in for the tag row on the search screen.
+ *
+ * It exists because the alternative -- an empty row until the tags arrive --
+ * had the screen claim there were no tags at all, which is the one flicker
+ * that gives away that a screen was swapped rather than a box focused.
+ */
+export function TagChipsSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2" aria-hidden>
+      {TAG_WIDTHS.map((width, index) => (
+        // `h-6` is what a chip measures: `text-xs` puts the line box at 16px
+        // and `py-1` adds 4px either side. Guessing instead would move the
+        // results down by a few pixels the moment the real tags arrived.
+        <Skeleton key={index} className={`h-6 rounded-full ${width}`} />
+      ))}
+    </div>
+  )
+}
+
 /** Stands in for a grid of photos, at the same three columns they land in. */
 export function MediaGridSkeleton() {
   return (

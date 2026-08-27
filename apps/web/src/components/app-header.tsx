@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Check,
   ChevronDown,
@@ -21,6 +21,7 @@ import { displayNameOrNull, selfLabel } from '@/lib/member-name'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { InviteDialog } from '@/components/invite-dialog'
 import { ProfileDialog } from '@/components/profile-dialog'
+import { TagSearchField } from '@/components/tag-search-field'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import {
@@ -67,6 +68,9 @@ export function AppHeader({ children }: AppHeaderProps) {
   const { session } = useAuth()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  // The field is the same control on every screen; only here does it stop
+  // being a way in and start being the thing itself.
+  const searching = useLocation().pathname === '/search'
   const { theme, setTheme } = useTheme()
 
   const [displayName, setDisplayName] = useState<string | null>(null)
@@ -128,14 +132,27 @@ export function AppHeader({ children }: AppHeaderProps) {
         <div className="flex min-w-0 items-center">{children}</div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="タグで探す"
-            render={<Link to="/search" />}
-          >
-            <Search />
-          </Button>
+          {/* A phone has no room for a box between a back link and a name, so
+              it keeps the icon it always had. The illusion the box buys is
+              only worth anything where the box fits: a tap on an icon was
+              never going to read as focusing a field. */}
+          {!isMobile ? (
+            <TagSearchField variant={searching ? 'input' : 'link'} />
+          ) : (
+            // Dropped once the search screen is the one showing: the field is
+            // down in the body there, and an icon linking to where you already
+            // are looks like a control and is not one.
+            !searching && (
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="タグで探す"
+                render={<Link to="/search" />}
+              >
+                <Search />
+              </Button>
+            )
+          )}
 
           {/* A dropdown wants a pointer near the thing it hangs off; a thumb
               reaching the top of a phone does not have one. Same actions, put
