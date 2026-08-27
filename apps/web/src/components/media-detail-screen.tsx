@@ -33,8 +33,22 @@ const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 })
 
-function formatTakenAt(item: MediaItem): string {
-  return dateFormatter.format(new Date(item.sort_key ?? item.uploaded_at))
+// Exif is the only source of a capture time and plenty of files carry none:
+// screenshots, anything re-encoded, most video off a phone. Naming the gap
+// beats showing the upload time in its place, which is what a single
+// unlabelled date did -- the two are indistinguishable from the picture.
+const UNKNOWN_CAPTURED_AT = '不明'
+
+function formatDateTime(value: string): string {
+  return dateFormatter.format(new Date(value))
+}
+
+/**
+ * What a saved file is named after: the date the listing sorts on, so a
+ * download lands among the others in the order it had on screen.
+ */
+function downloadStem(item: MediaItem): string {
+  return formatDateTime(item.sort_key ?? item.uploaded_at)
 }
 
 // The video element owns its own arrow keys and scrubber drags; treating
@@ -221,9 +235,9 @@ export function MediaDetailScreen() {
     setActionError(null)
 
     try {
-      // Named after the capture date rather than the storage key, which is a
-      // uuid and tells the person nothing once it is in their downloads.
-      const stem = formatTakenAt(current).replace(/[/: ]/g, '-')
+      // Named after its date rather than the storage key, which is a uuid and
+      // tells the person nothing once it is in their downloads.
+      const stem = downloadStem(current).replace(/[/: ]/g, '-')
       const signed = await presignGet(current.storage_key, { filename: `amber-${stem}` })
 
       // Handed to a detached iframe rather than assigned to location: the
@@ -431,7 +445,7 @@ export function MediaDetailScreen() {
         </div>
       ) : (
         <>
-          <div className="flex min-h-0 flex-1 items-center gap-2 px-2">
+          <div className="flex min-h-0 flex-1 items-center gap-2 px-2 py-4">
             <button
               type="button"
               aria-label="前へ"
@@ -442,7 +456,13 @@ export function MediaDetailScreen() {
               <ChevronLeft className="size-6" />
             </button>
 
-            <div className="flex min-w-0 flex-1 items-center justify-center">
+            {/* `self-stretch` is what makes the `max-h-full` below mean
+                anything. The row centres its children, so without it this
+                wrapper is sized by its own content -- the photo -- and the
+                photo's `max-height: 100%` resolves against itself. A tall
+                image then overflowed in both directions and painted over the
+                header's buttons and this footer. */}
+            <div className="flex min-w-0 flex-1 items-center justify-center self-stretch">
               {failed ? (
                 <p className="text-sm text-neutral-400">
                   読み込めませんでした。時間をおいて開き直してください。
@@ -467,16 +487,44 @@ export function MediaDetailScreen() {
             </button>
           </div>
 
-          <footer className="space-y-2 p-4 text-center text-sm text-neutral-400">
-            <p>
-              {formatTakenAt(current)} · by {uploaderLabel(current)}
-            </p>
-            <TagEditor
-              mediaItemId={current.id}
-              tags={tagsOf(current)}
-              onChange={handleTagsChange}
-              onError={setActionError}
-            />
+          {/* A surface of its own rather than more text on the same black:
+              sitting directly under the photo, the metadata read as something
+              left over in the margin instead of a panel to look at. */}
+          <footer className="border-t border-white/10 bg-neutral-900">
+            {/* The bar spans the window but its contents do not: `max-w-2xl`
+                is the container width every other screen already uses, and on
+                a wide monitor a full-bleed block strands the metadata against
+                the left edge, far from the photo it belongs to. */}
+            <div className="mx-auto max-w-2xl space-y-3 p-4">
+              {/* Left-aligned, not centred. Two labels of unequal length
+                  ("撮影" / "アップロード") centre into two ragged left edges,
+                  which is the same reason the account menu aligns its icons. */}
+              <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1 text-sm">
+                <dt className="text-neutral-400">撮影</dt>
+                <dd
+                  className={
+                    current.captured_at ? 'text-neutral-100 tabular-nums' : 'text-neutral-400'
+                  }
+                >
+                  {current.captured_at ? formatDateTime(current.captured_at) : UNKNOWN_CAPTURED_AT}
+                </dd>
+
+                <dt className="text-neutral-400">アップロード</dt>
+                <dd className="text-neutral-100">
+                  {/* Tabular figures on both dates, so the stacked rows line
+                      their digits up rather than drifting a column apart. */}
+                  <span className="tabular-nums">{formatDateTime(current.uploaded_at)}</span>
+                  <span className="text-neutral-400"> by {uploaderLabel(current)}</span>
+                </dd>
+              </dl>
+
+              <TagEditor
+                mediaItemId={current.id}
+                tags={tagsOf(current)}
+                onChange={handleTagsChange}
+                onError={setActionError}
+              />
+            </div>
           </footer>
         </>
       )}

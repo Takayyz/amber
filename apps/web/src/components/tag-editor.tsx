@@ -120,11 +120,17 @@ export function TagEditor({ mediaItemId, tags, onChange, onError }: TagEditorPro
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1.5">
+    // Left-aligned to match the dates above it, which are a two-column list
+    // and cannot be centred without their values going ragged.
+    <div className="flex flex-wrap items-center gap-1.5">
       {tags.map((tag) => (
+        // `bg-white/10` over the viewer's black lands on roughly #232323 --
+        // too close to the backdrop for the pill to read as a shape, so a run
+        // of tags looked like loose grey words. The inset ring draws the edge
+        // the fill alone was not dark enough to imply.
         <span
           key={tag.id}
-          className="inline-flex items-center gap-1 rounded-full bg-white/10 py-1 pr-1 pl-2.5 text-xs text-neutral-200"
+          className="inline-flex items-center gap-1 rounded-full bg-white/15 py-1 pr-1 pl-3 text-sm text-neutral-100 ring-1 ring-white/10 ring-inset"
         >
           {tag.name}
           <button
@@ -134,7 +140,7 @@ export function TagEditor({ mediaItemId, tags, onChange, onError }: TagEditorPro
             onClick={() => void remove(tag)}
             className="rounded-full p-0.5 hover:bg-white/20 disabled:opacity-50"
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
           </button>
         </span>
       ))}
@@ -156,12 +162,15 @@ export function TagEditor({ mediaItemId, tags, onChange, onError }: TagEditorPro
             // wait for that click to land.
             onBlur={() => window.setTimeout(() => setOpen(false), 0)}
             onKeyDown={handleKeyDown}
-            className="w-28 rounded-full bg-white/10 px-2.5 py-1 text-xs text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/40 disabled:opacity-50"
+            // `placeholder:text-neutral-500` was the one thing here actually
+            // under contrast (about 4.3:1 on the viewer's black, short of the
+            // 4.5 AA asks for); neutral-400 clears it at roughly 7:1.
+            className="w-32 rounded-full bg-white/15 px-3 py-1 text-sm text-neutral-100 ring-1 ring-white/10 ring-inset placeholder:text-neutral-400 focus:ring-2 focus:ring-white/50 focus:outline-none disabled:opacity-50"
           />
 
           {open && suggestions.length > 0 && (
             // Upwards: the footer sits at the bottom of the viewport.
-            <ul className="absolute bottom-full left-0 z-10 mb-1 max-h-48 w-40 overflow-y-auto rounded-lg bg-neutral-800 py-1 text-left shadow-lg">
+            <ul className="absolute bottom-full left-0 z-10 mb-1 max-h-48 w-44 overflow-y-auto rounded-lg border border-white/10 bg-neutral-800 py-1 text-left shadow-lg">
               {suggestions.map((tag) => (
                 <li key={tag.id}>
                   <button
@@ -172,7 +181,7 @@ export function TagEditor({ mediaItemId, tags, onChange, onError }: TagEditorPro
                       event.preventDefault()
                       void add(tag.name)
                     }}
-                    className="block w-full px-3 py-1.5 text-left text-xs text-neutral-200 hover:bg-white/10"
+                    className="block w-full px-3 py-1.5 text-left text-sm text-neutral-100 hover:bg-white/10"
                   >
                     {tag.name}
                   </button>
@@ -185,7 +194,7 @@ export function TagEditor({ mediaItemId, tags, onChange, onError }: TagEditorPro
 
       {/* Always on, which is also what answers "where did the input go?" once
           the photo has five. */}
-      <span className={`text-xs tabular-nums ${full ? 'text-neutral-400' : 'text-neutral-500'}`}>
+      <span className={`text-sm tabular-nums ${full ? 'text-neutral-200' : 'text-neutral-400'}`}>
         {tags.length}/{MAX_TAGS_PER_ITEM}
       </span>
     </div>
