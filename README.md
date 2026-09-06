@@ -89,7 +89,7 @@ Settings and migrations move independently — `pnpm supabase:config-push` does 
 
 ### Deploying the web app (Cloudflare Pages)
 
-1. Set the production build-time env vars (`apps/web/.env.production`, or exported in the shell before building): `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for the production Supabase project, and `VITE_API_URL` set to the Worker URL from the previous step. Vite bakes these in at build time — a static `wrangler pages deploy` doesn't run the build or manage them.
+1. Set the production build-time env vars (`apps/web/.env.production`, or exported in the shell before building): `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` for the production Supabase project, and `VITE_API_URL` set to the Worker URL from the previous step. The names have to match `apps/web/.env.example` exactly — Vite substitutes `import.meta.env` at build time and says nothing about a name that was never set, so a near-miss builds cleanly and ships a bundle that reaches Supabase with no key. A static `wrangler pages deploy` doesn't run the build or manage these either.
 2. `pnpm --filter web build`
 3. First deploy only: `pnpm --filter web exec wrangler pages project create` (prompts for a project name and production branch).
 4. `pnpm --filter web exec wrangler pages deploy dist`
