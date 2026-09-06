@@ -15,6 +15,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # Agent skills: vendored content, restored by `pnpm skills:install`.
 # .agents/skills.json (the manifest) is committed; the skills themselves are not.
