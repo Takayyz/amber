@@ -61,9 +61,23 @@ flowchart LR
 
 ### One-time prerequisites
 
-- A production Supabase project (separate from local dev), with `supabase/migrations` applied (`supabase db push` against the linked project) and Resend configured as the custom SMTP provider for magic-link email (see "Authentication" above).
+- A production Supabase project (separate from local dev), with `supabase/migrations` applied (`pnpm supabase:db-push` once the project is linked, per the next section) and Resend configured as the custom SMTP provider for magic-link email (see "Authentication" above).
 - Cloudflare R2 set up per the "R2 setup" step above — the same bucket serves both local dev and production, so this isn't a separate step per environment.
 - A decision on the production frontend URL (a `*.pages.dev` subdomain is fine to start; a custom domain can be attached later without changing the steps below).
+
+### Supabase project settings
+
+The production project's Auth settings are pushed from `supabase/config.toml` rather than clicked in the dashboard, so the values the project runs on are reviewable in the repo next to the migrations that shaped its schema.
+
+1. `pnpm supabase:link --project-ref <ref>` — the ref is the twenty-character string in the project's dashboard URL. Once per clone rather than once per deploy; it writes to `supabase/.temp/`, which is ignored.
+2. Uncomment the `[remotes.production]` block at the end of `supabase/config.toml` and fill in the ref and the production frontend URL. The ref has to be the real one — every `supabase` command validates its format, so a stand-in value fails `pnpm supabase:start` and the migration commands as well, not just the push.
+3. `pnpm supabase:config-push`
+
+A push sends the whole `[auth]` surface rather than the keys that happen to have changed, which makes every value in the sections above it a production value by default — including the ones written for a laptop. `[remotes.production]` is what makes that safe: the CLI deep-merges it over those sections when the linked ref matches, so it only has to carry the keys where local development wants something else. Everything it leaves out keeps the value from above, which is how `enable_signup = false` and `enable_anonymous_sign_ins = false` reach production — the two switches that keep the service invite-only (see "Authentication").
+
+Custom SMTP is the exception the push does not touch: the CLI sends those fields only when `[auth.email.smtp]` is filled in locally, and with the block left commented out the project's Resend configuration is left as the dashboard has it. `[auth.rate_limit] email_sent` rides along with the same condition, so the low local ceiling never reaches production either.
+
+Settings and migrations move independently — `pnpm supabase:config-push` does not apply migrations, and `pnpm supabase:db-push` does not carry settings. Both go to whichever project `supabase:link` pointed at.
 
 ### Deploying the API (Cloudflare Workers)
 
@@ -108,7 +122,7 @@ Amber uses a flat, service-level access control model — there is no per-album 
 - **Link expiry**: uses Supabase Auth's default expiry (`otp_expiry`, one hour locally). Expiry applies to the emailed link, never to the account, so a member who has logged in at least once can always ask for a fresh link however long they stay away. Someone still on their first, unopened invitation cannot — see the re-sending note below.
 - **Display name**: optional profile field, not required at first login. Falls back to the local part of the email address until set. No avatar/profile picture in MVP — an initial or generated color badge is enough.
 - **Unauthenticated screen**: a bare login screen (email input) — no marketing/landing page, since sign-up only ever happens via invite.
-- **Self-signup is disabled at the provider** (`[auth] enable_signup = false`, and the same switch on the production project). The login screen asking for a link rather than an account is not what enforces invite-only: the anon key ships in the frontend bundle, so `/auth/v1/signup` is callable by hand, and an account created that way arrives already confirmed — which is exactly the state that enrols a member. Note that `[auth.email] enable_signup` is a different switch despite the name; the CLI maps it onto whether the email provider works at all, so turning it off disables magic-link login outright.
+- **Self-signup is disabled at the provider** (`[auth] enable_signup = false`, which reaches the production project through `pnpm supabase:config-push` — see "Supabase project settings" under Deployment). The login screen asking for a link rather than an account is not what enforces invite-only: the anon key ships in the frontend bundle, so `/auth/v1/signup` is callable by hand, and an account created that way arrives already confirmed — which is exactly the state that enrols a member. Note that `[auth.email] enable_signup` is a different switch despite the name; the CLI maps it onto whether the email provider works at all, so turning it off disables magic-link login outright.
 - **An invitation that goes unopened past its expiry needs re-sending.** With self-signup off, Supabase Auth answers a magic-link request for an unconfirmed address with `signup_disabled`, so a recipient whose invite link expired cannot help themselves from the login screen. Someone already inside re-sends it for them, from the same dialog the invitation was sent from.
 
 ### Invite flow

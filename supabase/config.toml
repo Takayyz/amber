@@ -422,3 +422,26 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Settings for the production project, applied by `supabase config push` when the
+# linked project's ref matches project_id. Uncomment and fill both values in once
+# that project exists -- the ref has to be the real twenty-character one, since
+# every `supabase` command validates its format and a stand-in fails the local
+# commands too.
+#
+# The CLI deep-merges this over the sections above, so it carries only the keys
+# where local development wants something other than the production value.
+# Everything left out keeps the value from above -- `enable_signup` and
+# `enable_anonymous_sign_ins` included, which is how they reach the project.
+# [remotes.production]
+# project_id = ""
+#
+# [remotes.production.auth]
+# site_url = "https://<production-frontend>"
+# additional_redirect_urls = ["https://<production-frontend>"]
+#
+# [remotes.production.auth.email]
+# # "1s" above lets a link be re-requested immediately while testing against
+# # Mailpit. A minute in production matches the cooldown the invite re-send
+# # endpoint already enforces per invitation.
+# max_frequency = "60s"
