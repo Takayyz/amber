@@ -424,17 +424,22 @@ enabled = true
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
 # Settings for the production project, applied by `supabase config push` when the
-# linked project's ref matches project_id. Uncomment and fill both values in once
-# that project exists -- the ref has to be the real twenty-character one, since
-# every `supabase` command validates its format and a stand-in fails the local
-# commands too.
+# linked project's ref matches project_id. Uncomment this once that project
+# exists, with the ref in AMBER_PROD_PROJECT_REF -- the CLI reads it from the
+# untracked `.env` at the repo root. The ref names one person's project rather
+# than anything a clone of a public repo would push to, so it stays out of here.
+#
+# Committed commented out because the ref has to resolve to a real twenty-
+# character value: unset or malformed, it fails every `supabase` command, `start`
+# and the migrations included, not only the push. Uncommenting is a local change
+# for whoever operates the deployment.
 #
 # The CLI deep-merges this over the sections above, so it carries only the keys
 # where local development wants something other than the production value.
 # Everything left out keeps the value from above -- `enable_signup` and
 # `enable_anonymous_sign_ins` included, which is how they reach the project.
 # [remotes.production]
-# project_id = ""
+# project_id = "env(AMBER_PROD_PROJECT_REF)"
 #
 # [remotes.production.auth]
 # site_url = "https://<production-frontend>"
